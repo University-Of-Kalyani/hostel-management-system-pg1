@@ -214,7 +214,8 @@ export async function updateMeal(
 
 export async function updateUserMealStatus(
   mealId: string,
-  status: MealStatusType
+  status: MealStatusType,
+  { suspendGuestMeal = false }: { suspendGuestMeal?: boolean } = {}
 ): Promise<ApiResponse> {
   noStore()
   const session = await requireManager()
@@ -226,6 +227,11 @@ export async function updateUserMealStatus(
   const actorId = session.user.id
   if (!actorId) return { status: "error", message: "Unauthorized" }
 
+  // Guest meals can only be taken away as part of a suspension; any other
+  // status, including lifting the suspension, gives them back.
+  const guestMealSuspended =
+    status === MealStatusType.SUSPENDED && suspendGuestMeal
+
   try {
     const meal = await prisma.meal.update({
       where: {
@@ -233,6 +239,7 @@ export async function updateUserMealStatus(
       },
       data: {
         status,
+        guestMealSuspended,
       },
       include: {
         user: { select: { email: true, name: true } },
@@ -251,8 +258,8 @@ export async function updateUserMealStatus(
           actionType: "MEAL_STATUS_OVERRIDE",
           entityType: "MEAL",
           entityId: mealId,
-          newData: { status, targetUserId: meal.userId },
-          details: `Meal status set to ${status} by manager for ${meal.user?.name ?? meal.userId}.`,
+          newData: { status, guestMealSuspended, targetUserId: meal.userId },
+          details: `Meal status set to ${status}${guestMealSuspended ? " (with guest meal)" : ""} by manager for ${meal.user?.name ?? meal.userId}.`,
         },
       })
       .catch((err) => console.error("Activity log creation failed:", err))
@@ -262,6 +269,7 @@ export async function updateUserMealStatus(
         to: meal.user.email,
         name: meal.user.name,
         status,
+        guestMealSuspended,
       })
     }
 

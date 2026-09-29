@@ -9,6 +9,7 @@ import {
   checkMonthlyGuestQuota,
   guestChoiceKey,
   guestChoicesFor,
+  isGuestMealSuspended,
   istMinuteOfDay,
   resolveGuestMealCharge,
   resolveScheduledMealPrice,
@@ -554,5 +555,29 @@ describe("buildGuestMealPricing", () => {
       fallback: 60,
     })
     expect(prices["VEG:NONE"]).toBe(45)
+  })
+})
+
+describe("isGuestMealSuspended", () => {
+  it("keeps guest meals open on a plain suspension", () => {
+    expect(
+      isGuestMealSuspended({ status: "SUSPENDED", guestMealSuspended: false })
+    ).toBe(false)
+  })
+
+  it("closes guest meals on a suspension made with guest meal", () => {
+    expect(
+      isGuestMealSuspended({ status: "SUSPENDED", guestMealSuspended: true })
+    ).toBe(true)
+  })
+
+  it("ignores a stale flag once the boarder is no longer suspended", () => {
+    expect(
+      isGuestMealSuspended({ status: "ACTIVE", guestMealSuspended: true })
+    ).toBe(false)
+  })
+
+  it("lets a boarder with no meal row book", () => {
+    expect(isGuestMealSuspended(null)).toBe(false)
   })
 })

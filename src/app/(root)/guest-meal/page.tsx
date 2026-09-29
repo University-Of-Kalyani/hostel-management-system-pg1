@@ -13,6 +13,7 @@ import { useQuery } from "@tanstack/react-query"
 
 import { formatIST } from "@/lib/date"
 import { GuestMeal } from "@/lib/generated/prisma"
+import { GUEST_MEAL_SUSPENDED_REASON } from "@/lib/guest-meal-rules"
 import kyInstance from "@/lib/ky"
 import { toast } from "@/lib/toast"
 import {
@@ -62,6 +63,17 @@ export default function GuestMealsPage() {
     queryKey: ["guest-meals", "self", "pending"],
     queryFn: () => kyInstance.get("/api/user/guest-meals").json<GuestMeal[]>(),
   })
+  // Shares the dashboard's cache entry, so a boarder coming from there does
+  // not wait on a second fetch.
+  const { data: mealStatus } = useQuery({
+    queryKey: ["meal", "status"],
+    queryFn: () =>
+      kyInstance
+        .get("/api/user/meal/status")
+        .json<{ guestMealSuspended: boolean }>(),
+    refetchOnWindowFocus: false,
+  })
+  const guestMealSuspended = mealStatus?.guestMealSuspended ?? false
   if (isError && error) {
     toast.error(error.message)
   }
@@ -86,6 +98,18 @@ export default function GuestMealsPage() {
           been added to your bill.
         </p>
       </div>
+      {guestMealSuspended && (
+        <div className="border-destructive/50 text-destructive rounded-md border px-4 py-3">
+          <p className="text-sm">
+            <InfoIcon
+              className="me-3 -mt-0.5 inline-flex"
+              size={16}
+              aria-hidden="true"
+            />
+            {GUEST_MEAL_SUSPENDED_REASON}
+          </p>
+        </div>
+      )}
       <Card className="w-full shadow-sm">
         <CardHeader className="flex flex-col gap-3 border-b md:flex-row md:items-center md:justify-between">
           <div>
@@ -112,6 +136,7 @@ export default function GuestMealsPage() {
             <Button
               size="sm"
               className="flex-1 text-xs sm:flex-none sm:text-sm"
+              disabled={guestMealSuspended}
               onClick={() => setShowCreateGuestMealSheet(true)}
             >
               <Plus className="mr-1.5 size-3.5 sm:mr-2 sm:size-4" />
