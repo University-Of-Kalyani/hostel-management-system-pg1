@@ -1,4 +1,5 @@
 import getSession from "@/lib/get-session"
+import { isGuestMealSuspended } from "@/lib/guest-meal-rules"
 import { getMealPreferenceLock } from "@/lib/meal-lock"
 import prisma from "@/lib/prisma"
 
@@ -16,12 +17,17 @@ export async function GET() {
         },
         select: {
           status: true,
+          guestMealSuspended: true,
         },
       }),
       getMealPreferenceLock(),
     ])
 
-    return Response.json({ status: data?.status ?? null, ...lock })
+    return Response.json({
+      status: data?.status ?? null,
+      guestMealSuspended: isGuestMealSuspended(data),
+      ...lock,
+    })
   } catch {
     return Response.json({ error: "Internal Server Error" }, { status: 500 })
   }

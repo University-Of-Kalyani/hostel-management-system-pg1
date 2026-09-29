@@ -29,6 +29,9 @@ import {
   DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuSeparator,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { DataTableColumnHeader } from "@/components/data-table/data-table-column-header"
@@ -128,12 +131,17 @@ export function getColumns(): ColumnDef<GetMealWithUser>[] {
         const Icon = getMealStatusIcon(status)
 
         return (
-          <div className="flex w-[6.25rem] items-center">
+          <div className="flex min-w-[6.25rem] items-center">
             <Icon
               className="text-muted-foreground mr-2 size-4"
               aria-hidden="true"
             />
-            <span className="capitalize">{status.toLowerCase()}</span>
+            <span className="capitalize">
+              {status.toLowerCase()}
+              {status === MealStatusType.SUSPENDED &&
+                row.original.guestMealSuspended &&
+                " + guest"}
+            </span>
           </div>
         )
       },
@@ -194,17 +202,22 @@ export function getColumns(): ColumnDef<GetMealWithUser>[] {
               )
               break
             case "suspend-meal":
+            case "suspend-meal-with-guest": {
+              const suspendGuestMeal = action === "suspend-meal-with-guest"
               toast.promise(
-                updateUserMealStatus(meal.id, MealStatusType.SUSPENDED).finally(
-                  invalidateResidents
-                ),
+                updateUserMealStatus(meal.id, MealStatusType.SUSPENDED, {
+                  suspendGuestMeal,
+                }).finally(invalidateResidents),
                 {
                   loading: "Suspending user meal...",
-                  success: "User meal suspended successfully",
+                  success: suspendGuestMeal
+                    ? "User meal and guest meal suspended successfully"
+                    : "User meal suspended successfully",
                   error: (err) => getErrorMessage(err),
                 }
               )
               break
+            }
             case "unsuspend-meal":
               toast.promise(
                 updateUserMealStatus(meal.id, MealStatusType.ACTIVE).finally(
@@ -298,13 +311,26 @@ export function getColumns(): ColumnDef<GetMealWithUser>[] {
                   </DropdownMenuItem>
                 )}
                 {meal.status !== MealStatusType.SUSPENDED && (
-                  <DropdownMenuItem
-                    onClick={() => handleAction("suspend-meal")}
-                    className="cursor-pointer text-orange-600"
-                  >
-                    <Clock className="mr-2 h-4 w-4" />
-                    Suspend Meal
-                  </DropdownMenuItem>
+                  <DropdownMenuSub>
+                    <DropdownMenuSubTrigger className="cursor-pointer text-orange-600">
+                      <Clock className="mr-2 h-4 w-4" />
+                      Suspend Meal
+                    </DropdownMenuSubTrigger>
+                    <DropdownMenuSubContent>
+                      <DropdownMenuItem
+                        onClick={() => handleAction("suspend-meal")}
+                        className="cursor-pointer"
+                      >
+                        Regular meal only
+                      </DropdownMenuItem>
+                      <DropdownMenuItem
+                        onClick={() => handleAction("suspend-meal-with-guest")}
+                        className="cursor-pointer"
+                      >
+                        Regular + guest meal
+                      </DropdownMenuItem>
+                    </DropdownMenuSubContent>
+                  </DropdownMenuSub>
                 )}
                 {meal.status === MealStatusType.SUSPENDED && (
                   <DropdownMenuItem

@@ -50,6 +50,7 @@ export default function MealToggleButton() {
     queryFn: () =>
       kyInstance.get("/api/user/meal/status").json<{
         status: MealStatusType | null
+        guestMealSuspended: boolean
         locked: boolean
         unlockAt: string | null
       }>(),

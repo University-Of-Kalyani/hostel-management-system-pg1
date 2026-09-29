@@ -90,12 +90,18 @@ export async function sendMealStatusEmail({
   to,
   name,
   status,
+  guestMealSuspended = false,
 }: {
   to: string
   name: string | null
   status: MealStatusType
+  guestMealSuspended?: boolean
 }): Promise<boolean> {
-  const { label, color, detail } = MEAL_STATUS_COPY[status]
+  const copy = MEAL_STATUS_COPY[status]
+  const { label, color } = copy
+  const detail = guestMealSuspended
+    ? `${copy.detail} Guest meal booking is suspended as well.`
+    : copy.detail
 
   const body = `
     <p style="font-size: 14px; line-height: 1.6;">Hi ${name ?? "there"},</p>

@@ -22,7 +22,9 @@ import {
   checkBookingWindow,
   checkGuestsPerBooking,
   checkMonthlyGuestQuota,
+  GUEST_MEAL_SUSPENDED_REASON,
   guestChoiceKey,
+  isGuestMealSuspended,
   resolveScheduledMealPrice,
   resolveTierPrices,
   type GuestMealPricing,
@@ -323,6 +325,15 @@ export async function createGuestMeal(values: GuestMeal): Promise<ApiResponse> {
         message: `Too many booking attempts. Try again in ${describeRetryAfter(limit.retryAfterSeconds)}.`,
       }
     }
+
+    // The page hides the button too, but a stale tab or a crafted request
+    // must still be refused here.
+    const ownMeal = await prisma.meal.findUnique({
+      where: { userId: session.user.id },
+      select: { status: true, guestMealSuspended: true },
+    })
+    if (isGuestMealSuspended(ownMeal))
+      return { status: "error", message: GUEST_MEAL_SUSPENDED_REASON }
 
     const config = await getMessConfig()
 
