@@ -4,6 +4,7 @@ import {
   Bell,
   GraduationCap,
   House as Home,
+  Receipt,
   ForkKnife as Utensils,
 } from "@phosphor-icons/react/ssr"
 import { RiDashboardLine, RiToolsFill } from "@remixicon/react"
@@ -41,6 +42,13 @@ export const NavItems = () => {
       href: "/meal-count",
       icon: <BarChart3 size={20} />,
       active: isNavItemActive(pathname, "/meal-count"),
+      position: "top",
+    },
+    {
+      name: "Expenses",
+      href: "/expenses",
+      icon: <Receipt size={20} />,
+      active: isNavItemActive(pathname, "/expenses"),
       position: "top",
     },
     {
