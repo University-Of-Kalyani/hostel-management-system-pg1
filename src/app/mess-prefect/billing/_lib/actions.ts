@@ -20,6 +20,7 @@ import {
   GuestMealStatusType,
   UserStatusType,
 } from "@/lib/generated/prisma"
+import { lockLedgers } from "@/lib/ledger"
 import prisma from "@/lib/prisma"
 import { sendPushToUsers } from "@/lib/push"
 
@@ -391,15 +392,11 @@ export async function finalizeAndDistributeBills(
           throw new Error("Bills for this audit have already been distributed.")
         }
 
-        // Latest ledger balance per active user (one row each via distinct).
-        const latestBills = await tx.userBill.findMany({
-          where: { userId: { in: activeUsers.map((u) => u.id) } },
-          orderBy: { createdAt: "desc" },
-          distinct: ["userId"],
-          select: { userId: true, balanceRemaining: true },
-        })
-        const balanceByUser = new Map(
-          latestBills.map((b) => [b.userId, b.balanceRemaining])
+        // Latest ledger balance per active user, locked so a payment or guest
+        // meal landing mid-finalize can't be lost from the running balance.
+        const balanceByUser = await lockLedgers(
+          tx,
+          activeUsers.map((u) => u.id)
         )
 
         const rows = activeUsers.map((u) => {

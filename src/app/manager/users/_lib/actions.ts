@@ -16,6 +16,7 @@ import {
   Prisma,
   UserStatusType,
 } from "@/lib/generated/prisma"
+import { lockLedger } from "@/lib/ledger"
 import prisma from "@/lib/prisma"
 import { sendPushToUser } from "@/lib/push"
 import { parseEnumList } from "@/lib/utils"
@@ -328,19 +329,13 @@ export async function issueFineToUser({
       }
     }
 
-    const lastBill = await prisma.userBill.findFirst({
-      where: { userId: targetUserId },
-      orderBy: { createdAt: "desc" },
-      select: { balanceRemaining: true },
-    })
-    // console.log("[issueFineToUser] Last bill:", lastBill)
-
     if (!issuerUserId) {
       throw new Error("Issuer is required to issue a fine")
     }
 
     const result = await prisma.$transaction(async (tx) => {
       // console.log("[issueFineToUser][TX] Starting transaction")
+      const currentDue = await lockLedger(tx, targetUserId)
 
       const newFine = await tx.userFine.create({
         data: {
@@ -354,7 +349,6 @@ export async function issueFineToUser({
       })
       // console.log("[issueFineToUser][TX] New fine created:", newFine)
 
-      const currentDue = lastBill?.balanceRemaining ?? 0
       const newBalance = currentDue + fineAmountNumber
 
       const newBillEntry = await tx.userBill.create({
