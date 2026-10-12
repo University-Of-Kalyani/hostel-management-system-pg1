@@ -28,8 +28,9 @@ export type BillNotice = {
   perHead: number
 }
 
-// A day is plenty: finalizing clears the key, and nothing else changes it.
-const BILL_NOTICES_TTL = 24 * 60 * 60
+// Finalizing clears the key, so this only bounds how long a stale entry can
+// live - one written from the dev database, say, since the cache is shared.
+const BILL_NOTICES_TTL = 10 * 60
 
 async function fetchBillNotices(): Promise<BillNotice[]> {
   const audits = await prisma.audit.findMany({
