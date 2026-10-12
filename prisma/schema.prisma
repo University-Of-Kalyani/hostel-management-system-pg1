@@ -212,6 +212,10 @@ model UserBill {
   guestMeal GuestMeal?   @relation(fields: [guestMealId], references: [id])
   payment   UserPayment? @relation(fields: [paymentId], references: [id])
 
+  /// A guest meal is charged once and reversed at most once. Backstop for the
+  /// ledger lock in src/lib/ledger.ts: rows without a guest meal are NULL here
+  /// and never collide.
+  @@unique([guestMealId, type])
   @@map("user_bills")
 }
 

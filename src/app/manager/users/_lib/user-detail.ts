@@ -24,6 +24,7 @@ import {
   UserStatusType,
 } from "@/lib/generated/prisma"
 import getSession from "@/lib/get-session"
+import { lockLedger } from "@/lib/ledger"
 import prisma from "@/lib/prisma"
 import { sendPushToUser } from "@/lib/push"
 
@@ -200,12 +201,7 @@ export async function recordPayment(
     if (!target) return { status: "error", message: "User not found" }
 
     const result = await prisma.$transaction(async (tx) => {
-      const lastBill = await tx.userBill.findFirst({
-        where: { userId },
-        orderBy: { createdAt: "desc" },
-        select: { balanceRemaining: true },
-      })
-      const currentDue = lastBill?.balanceRemaining ?? 0
+      const currentDue = await lockLedger(tx, userId)
       const newBalance = currentDue - amount
 
       const bill = await tx.userBill.create({
@@ -335,12 +331,7 @@ export async function addUserDue(input: AddDueInput): Promise<ApiResponse> {
     if (!target) return { status: "error", message: "User not found" }
 
     const result = await prisma.$transaction(async (tx) => {
-      const lastBill = await tx.userBill.findFirst({
-        where: { userId },
-        orderBy: { createdAt: "desc" },
-        select: { balanceRemaining: true },
-      })
-      const currentDue = lastBill?.balanceRemaining ?? 0
+      const currentDue = await lockLedger(tx, userId)
       const newBalance = currentDue + amount
 
       const bill = await tx.userBill.create({
@@ -453,12 +444,7 @@ export async function addUserAdvance(
     if (!target) return { status: "error", message: "User not found" }
 
     const result = await prisma.$transaction(async (tx) => {
-      const lastBill = await tx.userBill.findFirst({
-        where: { userId },
-        orderBy: { createdAt: "desc" },
-        select: { balanceRemaining: true },
-      })
-      const currentDue = lastBill?.balanceRemaining ?? 0
+      const currentDue = await lockLedger(tx, userId)
       const newBalance = currentDue - amount
 
       const descriptionParts = ["Advance payment"]

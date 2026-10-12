@@ -10,6 +10,7 @@ import {
   GuestMealStatusType,
   NotificationType,
 } from "@/lib/generated/prisma"
+import { lockLedger } from "@/lib/ledger"
 import prisma from "@/lib/prisma"
 import { sendPushToUser } from "@/lib/push"
 
@@ -48,34 +49,35 @@ export async function updateGuestMealStatus({
   }
 
   try {
-    await prisma.guestMeal.update({
-      where: {
-        id: requestId,
-      },
-      data: {
-        status: status,
-        approvedAt: status === "APPROVED" ? new Date() : null,
-        approvedBy: status === "APPROVED" ? session.user.id : null,
-      },
-    })
+    // One transaction for the status and the ledger, behind the user's ledger
+    // lock: two managers acting on the same request used to both find no
+    // charge and both bill it. Now the second waits for the first and sees
+    // the charge (or reversal) it wrote.
+    await prisma.$transaction(async (tx) => {
+      const currentDue = await lockLedger(tx, requestedUserId)
 
-    if (status === "APPROVED") {
-      // Charge the user for the approved guest meal, but never double-charge the
-      // same request if it had already been approved before.
-      await prisma.$transaction(async (tx) => {
-        const existingCharge = await tx.userBill.findFirst({
-          where: {
-            guestMealId: requestId,
-            type: BillEntryType.GUEST_MEAL_CHARGE,
-          },
-        })
+      await tx.guestMeal.update({
+        where: {
+          id: requestId,
+        },
+        data: {
+          status: status,
+          approvedAt: status === "APPROVED" ? new Date() : null,
+          approvedBy: status === "APPROVED" ? session.user.id : null,
+        },
+      })
+
+      const existingCharge = await tx.userBill.findFirst({
+        where: {
+          guestMealId: requestId,
+          type: BillEntryType.GUEST_MEAL_CHARGE,
+        },
+      })
+
+      if (status === "APPROVED") {
+        // Charge the user for the approved guest meal, but never double-charge
+        // the same request if it had already been approved before.
         if (existingCharge) return
-
-        const lastBill = await tx.userBill.findFirst({
-          where: { userId: requestedUserId },
-          orderBy: { createdAt: "desc" },
-        })
-        const currentDue = lastBill?.balanceRemaining ?? 0
 
         await tx.userBill.create({
           data: {
@@ -88,19 +90,11 @@ export async function updateGuestMealStatus({
             user: { connect: { id: requestedUserId } },
           },
         })
-      })
-    } else if (status === "REJECTED" || status === "CANCELLED") {
-      // If this request was previously approved (and therefore billed), reverse
-      // the charge with an adjustment credit so it stops counting toward the
-      // user's dues. Idempotent: skip if there is no charge or it was already
-      // reversed.
-      await prisma.$transaction(async (tx) => {
-        const existingCharge = await tx.userBill.findFirst({
-          where: {
-            guestMealId: requestId,
-            type: BillEntryType.GUEST_MEAL_CHARGE,
-          },
-        })
+      } else if (status === "REJECTED" || status === "CANCELLED") {
+        // If this request was previously approved (and therefore billed),
+        // reverse the charge with an adjustment credit so it stops counting
+        // toward the user's dues. Idempotent: skip if there is no charge or it
+        // was already reversed.
         if (!existingCharge) return
 
         const alreadyReversed = await tx.userBill.findFirst({
@@ -111,11 +105,6 @@ export async function updateGuestMealStatus({
         })
         if (alreadyReversed) return
 
-        const lastBill = await tx.userBill.findFirst({
-          where: { userId: requestedUserId },
-          orderBy: { createdAt: "desc" },
-        })
-        const currentDue = lastBill?.balanceRemaining ?? 0
         const chargeAmount = existingCharge.amount
 
         await tx.userBill.create({
@@ -131,8 +120,8 @@ export async function updateGuestMealStatus({
             user: { connect: { id: requestedUserId } },
           },
         })
-      })
-    }
+      }
+    })
     prisma.notification
       .create({
         data: {
