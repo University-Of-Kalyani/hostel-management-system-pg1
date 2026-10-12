@@ -399,11 +399,14 @@ function NoticeSlips({
       <p className="text-muted-foreground mb-1 text-xs font-medium tracking-wide uppercase">
         All notices
       </p>
+      {/* A row that swipes on a phone; on desktop a column capped near the
+          bill's height that scrolls, so a year of notices doesn't run on far
+          below the bill. */}
       <motion.ul
         variants={slipList}
         initial="hidden"
         animate="shown"
-        className="-mx-1 flex snap-x gap-3 overflow-x-auto px-1 pt-3 pb-2 lg:flex-col lg:overflow-visible"
+        className="-mx-1 flex snap-x gap-3 overflow-x-auto px-1 pt-3 pb-2 lg:max-h-[70vh] lg:flex-col lg:overflow-x-hidden lg:overflow-y-auto"
       >
         {notices.map((n, i) => {
           const selected = n.id === selectedId
