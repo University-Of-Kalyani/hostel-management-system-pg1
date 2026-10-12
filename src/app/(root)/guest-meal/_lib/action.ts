@@ -30,6 +30,7 @@ import {
   type GuestMealPricing,
   type PricedDish,
 } from "@/lib/guest-meal-rules"
+import { lockLedger } from "@/lib/ledger"
 import { getGeneratedSlots, isMealCountGenerated } from "@/lib/meal-count"
 import { getAllowedGuestTypes, resolveOffers } from "@/lib/meal-priority"
 import { getMessConfig } from "@/lib/mess-config"
@@ -263,12 +264,23 @@ export const deleteGuestMealRequest = async (
         message: "Unauthorized",
       }
     }
-    await prisma.guestMeal.delete({
+    // Only while pending. Once the manager has acted the booking is billed
+    // (or settled), and deleting it would orphan the charge where nothing can
+    // reverse it. A stale tab, or a delete racing the approval, lands here.
+    const { count } = await prisma.guestMeal.deleteMany({
       where: {
         id,
         userId: session.user.id,
+        status: GuestMealStatusType.PENDING,
       },
     })
+    if (count === 0) {
+      return {
+        status: "error",
+        message:
+          "This request has already been handled by the manager, so it can't be deleted.",
+      }
+    }
 
     prisma.activityLog
       .create({
@@ -355,28 +367,6 @@ export async function createGuestMeal(values: GuestMeal): Promise<ApiResponse> {
     )
     if (!perBooking.ok) return { status: "error", message: perBooking.reason }
 
-    if (config.maxGuestMealsPerUserPerMonth > 0) {
-      const { year, month } = istParts(values.date)
-      const used = await prisma.guestMeal.aggregate({
-        _sum: { numberOfMeals: true },
-        where: {
-          userId: session.user.id,
-          date: {
-            gte: istStartOfMonth(year, month),
-            lte: istEndOfMonth(year, month),
-          },
-          status: { not: GuestMealStatusType.REJECTED },
-        },
-      })
-
-      const quota = checkMonthlyGuestQuota(
-        used._sum.numberOfMeals ?? 0,
-        values.numberOfMeals,
-        config.maxGuestMealsPerUserPerMonth
-      )
-      if (!quota.ok) return { status: "error", message: quota.reason }
-    }
-
     // One read for both the rule check and the price: the form quotes out of
     // this same call, so the guest cannot be shown one figure and billed
     // another.
@@ -431,23 +421,57 @@ export async function createGuestMeal(values: GuestMeal): Promise<ApiResponse> {
       ? applyAlumniDiscount(listPrice, config.guestMealAlumniDiscount)
       : listPrice
 
-    const meal = await prisma.guestMeal.create({
-      data: {
-        ...values,
-        alumniId: alumni?.id ?? null,
-        // The guest *is* the alumnus, so the name comes off the directory row
-        // and not off the form: the two must never disagree on a booking that
-        // was discounted for that person.
-        name: alumni?.name ?? values.name,
-        // The picker hands back the browser's local midnight, which for India
-        // serialises to 18:30Z on the *previous* day. Store the India calendar
-        // day instead, so the row cannot drift out of its own day's window.
-        date: istCalendarDay(values.date),
-        nonVegType: values.nonVegType ?? "NONE",
-        userId: session.user.id,
-        mealCharge: chargePerMeal * values.numberOfMeals,
-      },
+    const userId = session.user.id
+    const booked = await prisma.$transaction(async (tx) => {
+      // The quota is a sum over this boarder's bookings, so two sent together
+      // would each fit under it on their own. Taking the boarder's row lock
+      // (the ledger's) makes the second wait and count the first.
+      await lockLedger(tx, userId)
+
+      if (config.maxGuestMealsPerUserPerMonth > 0) {
+        const { year, month } = istParts(values.date)
+        const used = await tx.guestMeal.aggregate({
+          _sum: { numberOfMeals: true },
+          where: {
+            userId,
+            date: {
+              gte: istStartOfMonth(year, month),
+              lte: istEndOfMonth(year, month),
+            },
+            status: { not: GuestMealStatusType.REJECTED },
+          },
+        })
+
+        const quota = checkMonthlyGuestQuota(
+          used._sum.numberOfMeals ?? 0,
+          values.numberOfMeals,
+          config.maxGuestMealsPerUserPerMonth
+        )
+        if (!quota.ok) return { error: quota.reason }
+      }
+
+      const meal = await tx.guestMeal.create({
+        data: {
+          ...values,
+          alumniId: alumni?.id ?? null,
+          // The guest *is* the alumnus, so the name comes off the directory row
+          // and not off the form: the two must never disagree on a booking that
+          // was discounted for that person.
+          name: alumni?.name ?? values.name,
+          // The picker hands back the browser's local midnight, which for India
+          // serialises to 18:30Z on the *previous* day. Store the India calendar
+          // day instead, so the row cannot drift out of its own day's window.
+          date: istCalendarDay(values.date),
+          nonVegType: values.nonVegType ?? "NONE",
+          userId,
+          mealCharge: chargePerMeal * values.numberOfMeals,
+        },
+      })
+      return { meal }
     })
+    if (booked.error !== undefined)
+      return { status: "error", message: booked.error }
+    const { meal } = booked
     prisma.activityLog
       .create({
         data: {

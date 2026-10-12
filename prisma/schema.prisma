@@ -162,6 +162,9 @@ model Audit {
 
   approver User? @relation("AuditApprover", fields: [approvedBy], references: [id], onDelete: Restrict)
 
+  /// One audit per month - always the month's first day. Two first saves of a
+  /// month at once used to open two, and finalize could bill the wrong one.
+  @@unique([date])
   @@map("audits")
 }
 

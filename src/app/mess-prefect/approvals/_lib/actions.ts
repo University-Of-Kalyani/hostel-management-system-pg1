@@ -10,6 +10,9 @@ import prisma from "@/lib/prisma"
 
 const userIdSchema = z.object({ userId: z.string().min(1) })
 
+const STATUS_CHANGED =
+  "This user's status was changed just now. Reload the list and check it."
+
 export async function approveUser(input: {
   userId: string
 }): Promise<ApiResponse> {
@@ -30,15 +33,19 @@ export async function approveUser(input: {
       return { status: "success", message: "User is already active." }
     }
 
-    await prisma.$transaction([
-      prisma.user.update({
-        where: { id: target.id },
+    await prisma.$transaction(async (tx) => {
+      // Only from the status just read: a double click, or an approve racing
+      // a reject, would otherwise both apply and both notify.
+      const { count } = await tx.user.updateMany({
+        where: { id: target.id, status: target.status },
         data: {
           status: UserStatusType.ACTIVE,
           joinDate: target.joinDate ?? new Date(),
         },
-      }),
-      prisma.activityLog.create({
+      })
+      if (count === 0) throw new Error(STATUS_CHANGED)
+
+      await tx.activityLog.create({
         data: {
           userId: actorId,
           actionType: "USER_APPROVAL",
@@ -48,8 +55,9 @@ export async function approveUser(input: {
           newData: { status: UserStatusType.ACTIVE },
           details: `Approved ${target.name ?? target.id} as an active boarder.`,
         },
-      }),
-      prisma.notification.create({
+      })
+
+      await tx.notification.create({
         data: {
           title: "Account Approved 🎉",
           message:
@@ -58,8 +66,8 @@ export async function approveUser(input: {
           user: { connect: { id: target.id } },
           issuer: { connect: { id: actorId } },
         },
-      }),
-    ])
+      })
+    })
 
     revalidatePath("/mess-prefect/approvals")
     return {
@@ -94,12 +102,14 @@ export async function rejectUser(input: {
     })
     if (!target) return { status: "error", message: "User not found" }
 
-    await prisma.$transaction([
-      prisma.user.update({
-        where: { id: target.id },
+    await prisma.$transaction(async (tx) => {
+      const { count } = await tx.user.updateMany({
+        where: { id: target.id, status: target.status },
         data: { status: UserStatusType.SUSPENDED },
-      }),
-      prisma.activityLog.create({
+      })
+      if (count === 0) throw new Error(STATUS_CHANGED)
+
+      await tx.activityLog.create({
         data: {
           userId: actorId,
           actionType: "USER_REJECTION",
@@ -109,8 +119,8 @@ export async function rejectUser(input: {
           newData: { status: UserStatusType.SUSPENDED },
           details: `Rejected/suspended ${target.name ?? target.id}.`,
         },
-      }),
-    ])
+      })
+    })
 
     revalidatePath("/mess-prefect/approvals")
     return {
