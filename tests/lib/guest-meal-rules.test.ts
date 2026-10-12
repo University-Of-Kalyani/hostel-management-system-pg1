@@ -559,22 +559,14 @@ describe("buildGuestMealPricing", () => {
 })
 
 describe("isGuestMealSuspended", () => {
-  it("keeps guest meals open on a plain suspension", () => {
-    expect(
-      isGuestMealSuspended({ status: "SUSPENDED", guestMealSuspended: false })
-    ).toBe(false)
+  it("keeps guest meals open unless the manager closed them", () => {
+    expect(isGuestMealSuspended({ guestMealSuspended: false })).toBe(false)
   })
 
-  it("closes guest meals on a suspension made with guest meal", () => {
-    expect(
-      isGuestMealSuspended({ status: "SUSPENDED", guestMealSuspended: true })
-    ).toBe(true)
-  })
-
-  it("ignores a stale flag once the boarder is no longer suspended", () => {
-    expect(
-      isGuestMealSuspended({ status: "ACTIVE", guestMealSuspended: true })
-    ).toBe(false)
+  // Guest booking is closed on its own now: the boarder may still be eating
+  // regular meals, so the meal status no longer matters.
+  it("closes guest meals whatever the regular meal is doing", () => {
+    expect(isGuestMealSuspended({ guestMealSuspended: true })).toBe(true)
   })
 
   it("lets a boarder with no meal row book", () => {

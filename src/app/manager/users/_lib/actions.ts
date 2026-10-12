@@ -213,10 +213,15 @@ export async function updateMeal(
   }
 }
 
+/**
+ * Set a boarder's meal status. `guestMealSuspended` is written only when
+ * given: suspending "regular + guest" passes true, lifting both passes false,
+ * and anything else leaves guest booking as it was.
+ */
 export async function updateUserMealStatus(
   mealId: string,
   status: MealStatusType,
-  { suspendGuestMeal = false }: { suspendGuestMeal?: boolean } = {}
+  { guestMealSuspended }: { guestMealSuspended?: boolean } = {}
 ): Promise<ApiResponse> {
   noStore()
   const session = await requireManager()
@@ -228,11 +233,6 @@ export async function updateUserMealStatus(
   const actorId = session.user.id
   if (!actorId) return { status: "error", message: "Unauthorized" }
 
-  // Guest meals can only be taken away as part of a suspension; any other
-  // status, including lifting the suspension, gives them back.
-  const guestMealSuspended =
-    status === MealStatusType.SUSPENDED && suspendGuestMeal
-
   try {
     const meal = await prisma.meal.update({
       where: {
@@ -240,7 +240,7 @@ export async function updateUserMealStatus(
       },
       data: {
         status,
-        guestMealSuspended,
+        ...(guestMealSuspended !== undefined && { guestMealSuspended }),
       },
       include: {
         user: { select: { email: true, name: true } },
@@ -260,7 +260,13 @@ export async function updateUserMealStatus(
           entityType: "MEAL",
           entityId: mealId,
           newData: { status, guestMealSuspended, targetUserId: meal.userId },
-          details: `Meal status set to ${status}${guestMealSuspended ? " (with guest meal)" : ""} by manager for ${meal.user?.name ?? meal.userId}.`,
+          details: `Meal status set to ${status}${
+            guestMealSuspended === true
+              ? " (with guest meal)"
+              : guestMealSuspended === false
+                ? " (guest meal restored)"
+                : ""
+          } by manager for ${meal.user?.name ?? meal.userId}.`,
         },
       })
       .catch((err) => console.error("Activity log creation failed:", err))
@@ -270,7 +276,8 @@ export async function updateUserMealStatus(
         to: meal.user.email,
         name: meal.user.name,
         status,
-        guestMealSuspended,
+        guestMealSuspended:
+          status === MealStatusType.SUSPENDED && meal.guestMealSuspended,
       })
     }
 
@@ -288,6 +295,90 @@ export async function updateUserMealStatus(
     }
   }
 }
+/**
+ * Suspend or restore guest meal booking alone, leaving the regular meal as it
+ * is. Idempotent: the update only matches a meal not already in that state,
+ * so a double click or a second manager doing the same writes one log entry
+ * and sends one notification.
+ */
+export async function updateGuestMealSuspension(
+  mealId: string,
+  suspended: boolean
+): Promise<ApiResponse> {
+  noStore()
+  const session = await requireManager()
+  const actorId = session?.user.id
+  if (!actorId) return { status: "error", message: "Unauthorized" }
+
+  try {
+    const { count } = await prisma.meal.updateMany({
+      where: { id: mealId, guestMealSuspended: !suspended },
+      data: { guestMealSuspended: suspended },
+    })
+    const meal = await prisma.meal.findUnique({
+      where: { id: mealId },
+      select: { userId: true, user: { select: { name: true } } },
+    })
+    if (!meal) return { status: "error", message: "Meal not found" }
+
+    const message = suspended
+      ? "Guest meal suspended"
+      : "Guest meal booking restored"
+    if (count === 0) return { status: "success", message }
+
+    revalidateMealSurfaces(meal.userId)
+
+    prisma.activityLog
+      .create({
+        data: {
+          userId: actorId,
+          actionType: "MEAL_STATUS_OVERRIDE",
+          entityType: "MEAL",
+          entityId: mealId,
+          newData: { guestMealSuspended: suspended, targetUserId: meal.userId },
+          details: `Guest meal ${suspended ? "suspended" : "restored"} by manager for ${meal.user?.name ?? meal.userId}.`,
+        },
+      })
+      .catch((err) => console.error("Activity log creation failed:", err))
+
+    const body = suspended
+      ? `${session.user.name} suspended your guest meal booking. Your regular meal is not affected.`
+      : `${session.user.name} restored your guest meal booking.`
+
+    prisma.notification
+      .create({
+        data: {
+          title: suspended ? "Guest meal suspended" : "Guest meal restored",
+          message: body,
+          type: NotificationType.MEAL,
+          user: { connect: { id: meal.userId } },
+          issuer: { connect: { id: actorId } },
+        },
+      })
+      .catch((err) => console.error("Notification creation failed:", err))
+
+    after(() =>
+      sendPushToUser(meal.userId, {
+        title: suspended ? "Guest meal suspended" : "Guest meal restored",
+        body,
+        icon: "/app-icon-192.png",
+        url: "/guest-meal",
+        tag: `guest-meal-suspension-${mealId}`,
+      }).catch((err) => console.error("Push notification failed:", err))
+    )
+
+    return { status: "success", message }
+  } catch (error) {
+    return {
+      status: "error",
+      message:
+        error instanceof Error
+          ? error.message
+          : "An unexpected error occurred. Please try again later.",
+    }
+  }
+}
+
 export async function issueFineToUser({
   targetUserId,
   fineAmount,

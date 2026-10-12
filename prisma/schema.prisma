@@ -120,9 +120,9 @@ model Meal {
   nonVegType          NonVegType     @default(NONE)
   status              MealStatusType @default(INACTIVE)
   dislikedNonVegTypes NonVegType[]   @default([]) @map("disliked_non_veg_types")
-  /// Set when the suspension also takes away guest meal booking. Only read
-  /// while `status` is SUSPENDED; a plain suspension still lets a boarder
-  /// book for guests.
+  /// Guest meal booking is suspended. Independent of `status`: a boarder can
+  /// keep their regular meal with guest booking closed, or lose both. A plain
+  /// suspension still lets a boarder book for guests.
   guestMealSuspended  Boolean        @default(false) @map("guest_meal_suspended")
 
   createdAt DateTime @default(now()) @map("created_at")

@@ -1,12 +1,7 @@
 import { differenceInCalendarDays } from "date-fns"
 
 import { istWallClock, istYmd } from "@/lib/date"
-import {
-  MealStatusType,
-  MealTimeType,
-  MealType,
-  NonVegType,
-} from "@/lib/generated/prisma"
+import { MealTimeType, MealType, NonVegType } from "@/lib/generated/prisma"
 import { NON_VEG_PRIORITY } from "@/lib/meal-priority"
 
 export type BookingWindowConfig = {
@@ -94,20 +89,20 @@ export function checkBookingWindow(
 }
 
 /**
- * Whether the boarder's own meal state still lets them book for guests.
+ * Whether the boarder may book for guests.
  *
- * A plain suspension leaves guest meals open; only a suspension the manager
- * made "with guest meal" closes them. The flag is ignored outside SUSPENDED so
- * a stale value can never lock out an active boarder.
+ * Guest meal booking is suspended on its own, independent of the regular
+ * meal: a boarder can keep eating while their guest booking is closed, or be
+ * suspended from both. A plain meal suspension leaves guest meals open.
  */
 export function isGuestMealSuspended(
-  meal: { status: MealStatusType; guestMealSuspended: boolean } | null
+  meal: { guestMealSuspended: boolean } | null
 ): boolean {
-  return meal?.status === MealStatusType.SUSPENDED && meal.guestMealSuspended
+  return meal?.guestMealSuspended ?? false
 }
 
 export const GUEST_MEAL_SUSPENDED_REASON =
-  "Your guest meal access is suspended along with your meal. Please contact the mess manager."
+  "Guest meal booking is suspended for your account. Please contact the mess manager."
 
 /** Per-booking guest cap. 0 disables the cap. */
 export function checkGuestsPerBooking(

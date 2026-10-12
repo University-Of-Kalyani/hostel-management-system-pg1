@@ -11,6 +11,8 @@ import {
   Gavel,
   DotsThree as MoreHorizontal,
   ArrowsClockwise as RefreshCcw,
+  UserMinus,
+  UserPlus,
   XCircle,
 } from "@phosphor-icons/react"
 import { useQueryClient } from "@tanstack/react-query"
@@ -37,7 +39,10 @@ import {
 import { DataTableColumnHeader } from "@/components/data-table/data-table-column-header"
 import UserAvatar from "@/components/UserAvatar"
 
-import { updateUserMealStatus } from "../_lib/actions"
+import {
+  updateGuestMealSuspension,
+  updateUserMealStatus,
+} from "../_lib/actions"
 import { getMealStatusIcon, getNonVegTypeIcon } from "../_lib/utils"
 import { CreateFineSheet } from "./issue-fine-user-sheet"
 import { UpdateMealSheet } from "./update-users-meal-sheet"
@@ -138,9 +143,10 @@ export function getColumns(): ColumnDef<GetMealWithUser>[] {
             />
             <span className="capitalize">
               {status.toLowerCase()}
-              {status === MealStatusType.SUSPENDED &&
-                row.original.guestMealSuspended &&
-                " + guest"}
+              {row.original.guestMealSuspended &&
+                (status === MealStatusType.SUSPENDED
+                  ? " + guest"
+                  : " · guest suspended")}
             </span>
           </div>
         )
@@ -206,7 +212,8 @@ export function getColumns(): ColumnDef<GetMealWithUser>[] {
               const suspendGuestMeal = action === "suspend-meal-with-guest"
               toast.promise(
                 updateUserMealStatus(meal.id, MealStatusType.SUSPENDED, {
-                  suspendGuestMeal,
+                  // Regular-only leaves guest booking exactly as it was.
+                  guestMealSuspended: suspendGuestMeal || undefined,
                 }).finally(invalidateResidents),
                 {
                   loading: "Suspending user meal...",
@@ -219,17 +226,42 @@ export function getColumns(): ColumnDef<GetMealWithUser>[] {
               break
             }
             case "unsuspend-meal":
+            case "unsuspend-meal-with-guest": {
+              const restoreGuestMeal = action === "unsuspend-meal-with-guest"
               toast.promise(
-                updateUserMealStatus(meal.id, MealStatusType.ACTIVE).finally(
-                  invalidateResidents
-                ),
+                updateUserMealStatus(meal.id, MealStatusType.ACTIVE, {
+                  guestMealSuspended: restoreGuestMeal ? false : undefined,
+                }).finally(invalidateResidents),
                 {
                   loading: "Unsuspending user meal...",
-                  success: "User meal unsuspended successfully",
+                  success: restoreGuestMeal
+                    ? "User meal and guest meal unsuspended successfully"
+                    : "User meal unsuspended successfully",
                   error: (err) => getErrorMessage(err),
                 }
               )
               break
+            }
+            case "suspend-guest-meal":
+            case "resume-guest-meal": {
+              const suspend = action === "suspend-guest-meal"
+              toast.promise(
+                updateGuestMealSuspension(meal.id, suspend)
+                  .then((res) => {
+                    if (res.status === "error") throw new Error(res.message)
+                    return res
+                  })
+                  .finally(invalidateResidents),
+                {
+                  loading: suspend
+                    ? "Suspending guest meal..."
+                    : "Restoring guest meal...",
+                  success: (res) => res.message,
+                  error: (err) => getErrorMessage(err),
+                }
+              )
+              break
+            }
             case "view": {
               const base = pathname.startsWith("/mess-prefect")
                 ? "/mess-prefect"
@@ -332,13 +364,55 @@ export function getColumns(): ColumnDef<GetMealWithUser>[] {
                     </DropdownMenuSubContent>
                   </DropdownMenuSub>
                 )}
-                {meal.status === MealStatusType.SUSPENDED && (
+                {meal.status === MealStatusType.SUSPENDED &&
+                  (meal.guestMealSuspended ? (
+                    <DropdownMenuSub>
+                      <DropdownMenuSubTrigger className="cursor-pointer text-blue-600">
+                        <RefreshCcw className="mr-2 h-4 w-4" />
+                        Unsuspend Meal
+                      </DropdownMenuSubTrigger>
+                      <DropdownMenuSubContent>
+                        <DropdownMenuItem
+                          onClick={() => handleAction("unsuspend-meal")}
+                          className="cursor-pointer"
+                        >
+                          Regular meal only
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
+                          onClick={() =>
+                            handleAction("unsuspend-meal-with-guest")
+                          }
+                          className="cursor-pointer"
+                        >
+                          Regular + guest meal
+                        </DropdownMenuItem>
+                      </DropdownMenuSubContent>
+                    </DropdownMenuSub>
+                  ) : (
+                    <DropdownMenuItem
+                      onClick={() => handleAction("unsuspend-meal")}
+                      className="cursor-pointer text-blue-600"
+                    >
+                      <RefreshCcw className="mr-2 h-4 w-4" />
+                      Unsuspend Meal
+                    </DropdownMenuItem>
+                  ))}
+                {/* Guest booking on its own; the regular meal is untouched. */}
+                {meal.guestMealSuspended ? (
                   <DropdownMenuItem
-                    onClick={() => handleAction("unsuspend-meal")}
+                    onClick={() => handleAction("resume-guest-meal")}
                     className="cursor-pointer text-blue-600"
                   >
-                    <RefreshCcw className="mr-2 h-4 w-4" />
-                    Unsuspend Meal
+                    <UserPlus className="mr-2 h-4 w-4" />
+                    Resume Guest Meal
+                  </DropdownMenuItem>
+                ) : (
+                  <DropdownMenuItem
+                    onClick={() => handleAction("suspend-guest-meal")}
+                    className="cursor-pointer text-orange-600"
+                  >
+                    <UserMinus className="mr-2 h-4 w-4" />
+                    Suspend Guest Meal
                   </DropdownMenuItem>
                 )}
               </DropdownMenuContent>
