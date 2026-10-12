@@ -17,12 +17,8 @@ import { sendPushToUser } from "@/lib/push"
 export async function updateGuestMealStatus({
   requestId,
   status,
-  requestedUserId,
-  amount,
 }: {
   requestId: string
-  requestedUserId: string
-  amount: number
   status: GuestMealStatusType
 }): Promise<ApiResponse> {
   const session = await requireManager()
@@ -48,79 +44,53 @@ export async function updateGuestMealStatus({
     return { status: "error", message: "Unauthorized" }
   }
 
-  try {
-    // One transaction for the status and the ledger, behind the user's ledger
-    // lock: two managers acting on the same request used to both find no
-    // charge and both bill it. Now the second waits for the first and sees
-    // the charge (or reversal) it wrote.
-    await prisma.$transaction(async (tx) => {
-      const currentDue = await lockLedger(tx, requestedUserId)
+  if (status === GuestMealStatusType.PENDING) {
+    return { status: "error", message: "Choose to approve or reject." }
+  }
 
-      await tx.guestMeal.update({
-        where: {
-          id: requestId,
-        },
+  try {
+    const requestedUserId = await prisma.$transaction(async (tx) => {
+      // Who to bill and how much come off the request itself, never from the
+      // client.
+      const request = await tx.guestMeal.findUnique({
+        where: { id: requestId },
+        select: { userId: true, mealCharge: true },
+      })
+      if (!request) throw new Error("Guest meal request not found.")
+
+      const currentDue = await lockLedger(tx, request.userId)
+
+      // A request is decided once, while pending. Two managers on the same
+      // request (or an approve racing a reject) used to both go through: a
+      // double charge, or the boarder told "approved" while the row said
+      // rejected. The second now waits on the row and matches nothing.
+      const { count } = await tx.guestMeal.updateMany({
+        where: { id: requestId, status: GuestMealStatusType.PENDING },
         data: {
           status: status,
           approvedAt: status === "APPROVED" ? new Date() : null,
           approvedBy: status === "APPROVED" ? session.user.id : null,
         },
       })
+      if (count === 0) {
+        throw new Error("This request has already been handled.")
+      }
 
-      const existingCharge = await tx.userBill.findFirst({
-        where: {
-          guestMealId: requestId,
-          type: BillEntryType.GUEST_MEAL_CHARGE,
-        },
-      })
-
+      // Still pending until a moment ago, so it has never been billed.
       if (status === "APPROVED") {
-        // Charge the user for the approved guest meal, but never double-charge
-        // the same request if it had already been approved before.
-        if (existingCharge) return
-
         await tx.userBill.create({
           data: {
             type: BillEntryType.GUEST_MEAL_CHARGE,
-            amount,
+            amount: request.mealCharge,
             description: `Guest Meal: Your meal request was approved by ${session.user.name}.`,
-            balanceRemaining: currentDue + amount,
+            balanceRemaining: currentDue + request.mealCharge,
             issueDate: new Date(),
             guestMeal: { connect: { id: requestId } },
-            user: { connect: { id: requestedUserId } },
-          },
-        })
-      } else if (status === "REJECTED" || status === "CANCELLED") {
-        // If this request was previously approved (and therefore billed),
-        // reverse the charge with an adjustment credit so it stops counting
-        // toward the user's dues. Idempotent: skip if there is no charge or it
-        // was already reversed.
-        if (!existingCharge) return
-
-        const alreadyReversed = await tx.userBill.findFirst({
-          where: {
-            guestMealId: requestId,
-            type: BillEntryType.ADJUSTMENT_CREDIT,
-          },
-        })
-        if (alreadyReversed) return
-
-        const chargeAmount = existingCharge.amount
-
-        await tx.userBill.create({
-          data: {
-            type: BillEntryType.ADJUSTMENT_CREDIT,
-            amount: -chargeAmount,
-            description: `Guest Meal reversal: request ${status.toLowerCase()} by ${session.user.name}; charge of ₹${chargeAmount.toFixed(
-              2
-            )} refunded.`,
-            balanceRemaining: currentDue - chargeAmount,
-            issueDate: new Date(),
-            guestMeal: { connect: { id: requestId } },
-            user: { connect: { id: requestedUserId } },
+            user: { connect: { id: request.userId } },
           },
         })
       }
+      return request.userId
     })
     prisma.notification
       .create({

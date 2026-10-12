@@ -19,6 +19,7 @@ import {
 import {
   BillEntryType,
   GuestMealStatusType,
+  Prisma,
   UserStatusType,
 } from "@/lib/generated/prisma"
 import { lockLedgers } from "@/lib/ledger"
@@ -84,6 +85,27 @@ function isBillableMonth(periodStart: Date) {
 }
 
 export type BillingData = Awaited<ReturnType<typeof getBillingData>>
+
+// Two saves of the same month (the exclusion table and the expense form each
+// save on their own) must not overwrite each other's numbers or open a second
+// audit for the month. Writes only land on the version they read; a loser
+// gets this and reloads.
+const BILL_CHANGED: ApiResponse = {
+  status: "error",
+  message:
+    "This month's bill was changed or finalized just now. Reload and try again.",
+}
+
+/** The month already has an audit (`@@unique([date])`): someone just made it. */
+function onDuplicateMonth(error: unknown): null {
+  if (
+    error instanceof Prisma.PrismaClientKnownRequestError &&
+    error.code === "P2002"
+  ) {
+    return null
+  }
+  throw error
+}
 
 export async function getBillingData(input?: { year: number; month: number }) {
   noStore()
@@ -286,21 +308,26 @@ export async function saveAuditDraft(
 
     let auditId: string
     if (existing) {
-      const updated = await prisma.audit.update({
-        where: { id: existing.id },
+      // Only if nothing changed since `existing` was read: the charge above is
+      // worked out from its exclusions, and a finalize may have landed since.
+      const { count } = await prisma.audit.updateMany({
+        where: { id: existing.id, approvedAt: null, version: existing.version },
         data: { ...payload, version: { increment: 1 } },
-        select: { id: true },
       })
-      auditId = updated.id
+      if (count === 0) return BILL_CHANGED
+      auditId = existing.id
     } else {
-      const created = await prisma.audit.create({
-        data: {
-          ...payload,
-          date: period.start,
-          auditor: { connect: { id: session.user.id } },
-        },
-        select: { id: true },
-      })
+      const created = await prisma.audit
+        .create({
+          data: {
+            ...payload,
+            date: period.start,
+            auditor: { connect: { id: session.user.id } },
+          },
+          select: { id: true },
+        })
+        .catch(onDuplicateMonth)
+      if (!created) return BILL_CHANGED
       auditId = created.id
     }
 
@@ -377,20 +404,25 @@ export async function finalizeAndDistributeBills(
 
     const result = await prisma.$transaction(
       async (tx) => {
-        // Re-check the idempotency guards INSIDE the transaction so two
-        // concurrent finalize calls can't both distribute (race-safe).
-        const fresh = await tx.audit.findUnique({
-          where: { id: auditId },
-          select: { approvedAt: true },
+        // Claim the audit before billing anyone. A read-only recheck here
+        // doesn't block a second finalize (double click, two tabs): both
+        // would pass it, and the second would bill every boarder again once
+        // the first committed. The conditional update takes the row lock, so
+        // the second waits, then matches nothing. The version also refuses a
+        // draft saved since `audit` was read - its charge would be stale.
+        const { count: claimed } = await tx.audit.updateMany({
+          where: { id: auditId, approvedAt: null, version: audit.version },
+          data: {
+            approvedBy: actorId,
+            approvedAt: new Date(),
+            version: { increment: 1 },
+            totalBoarders: activeUsers.length,
+          },
         })
-        if (fresh?.approvedAt) {
-          throw new Error("This month's bills have already been finalized.")
-        }
-        const alreadyDistributed = await tx.userBill.count({
-          where: { auditId, type: BillEntryType.MEAL_CHARGE },
-        })
-        if (alreadyDistributed > 0) {
-          throw new Error("Bills for this audit have already been distributed.")
+        if (claimed === 0) {
+          throw new Error(
+            "This month's bill was finalized or changed just now. Reload and check it."
+          )
         }
 
         // Latest ledger balance per active user, locked so a payment or guest
@@ -416,16 +448,6 @@ export async function finalizeAndDistributeBills(
         })
 
         await tx.userBill.createMany({ data: rows })
-
-        await tx.audit.update({
-          where: { id: audit.id },
-          data: {
-            approvedBy: actorId,
-            approvedAt: new Date(),
-            version: { increment: 1 },
-            totalBoarders: activeUsers.length,
-          },
-        })
 
         // The single biggest money event in the app — logged inside the same
         // transaction as the charges themselves, so it can never happen
@@ -550,36 +572,39 @@ export async function setBillingExclusions(
         existing.adjustment,
         billableBoarders
       )
-      const updated = await prisma.audit.update({
-        where: { id: existing.id },
+      const { count } = await prisma.audit.updateMany({
+        where: { id: existing.id, approvedAt: null, version: existing.version },
         data: {
           excludedUserIds: cleanExcluded,
           totalBoarders: billableBoarders,
           mealCharge,
           version: { increment: 1 },
         },
-        select: { id: true },
       })
-      auditId = updated.id
+      if (count === 0) return BILL_CHANGED
+      auditId = existing.id
     } else {
-      const created = await prisma.audit.create({
-        data: {
-          date: period.start,
-          riceExpenses: 0,
-          vegetableExpenses: 0,
-          fishExpenses: 0,
-          groceryExpenses: 0,
-          dailyExpenses: 0,
-          otherExpenses: 0,
-          adjustment: 0,
-          grandTotalExpenses: 0,
-          totalBoarders: billableBoarders,
-          mealCharge: 0,
-          excludedUserIds: cleanExcluded,
-          auditor: { connect: { id: actorId } },
-        },
-        select: { id: true },
-      })
+      const created = await prisma.audit
+        .create({
+          data: {
+            date: period.start,
+            riceExpenses: 0,
+            vegetableExpenses: 0,
+            fishExpenses: 0,
+            groceryExpenses: 0,
+            dailyExpenses: 0,
+            otherExpenses: 0,
+            adjustment: 0,
+            grandTotalExpenses: 0,
+            totalBoarders: billableBoarders,
+            mealCharge: 0,
+            excludedUserIds: cleanExcluded,
+            auditor: { connect: { id: actorId } },
+          },
+          select: { id: true },
+        })
+        .catch(onDuplicateMonth)
+      if (!created) return BILL_CHANGED
       auditId = created.id
     }
 

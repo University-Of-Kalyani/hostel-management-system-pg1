@@ -508,6 +508,22 @@ export async function transferUserToAlumni(
     }
 
     const { alumniId } = await prisma.$transaction(async (tx) => {
+      // Claim the user first. The "already transferred" check above runs
+      // outside the transaction, so two submits at once both passed it and
+      // made two directory rows and sent two farewell emails. The second now
+      // waits on this row and matches nothing.
+      const { count } = await tx.user.updateMany({
+        where: {
+          id: userId,
+          deletedAt: null,
+          status: { not: UserStatusType.FORMA },
+        },
+        data: { status: UserStatusType.FORMA, deletedAt: new Date() },
+      })
+      if (count === 0) {
+        throw new Error("This user has already been transferred to alumni.")
+      }
+
       const alumni = await tx.alumni.create({
         data: {
           name: alumniName,
@@ -521,11 +537,6 @@ export async function transferUserToAlumni(
           snapshot: snapshot as Prisma.InputJsonValue,
         },
         select: { id: true },
-      })
-
-      await tx.user.update({
-        where: { id: userId },
-        data: { status: UserStatusType.FORMA, deletedAt: new Date() },
       })
 
       await tx.meal.updateMany({
