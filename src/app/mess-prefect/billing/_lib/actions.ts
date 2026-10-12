@@ -7,6 +7,7 @@ import { ApiResponse } from "@/types"
 import { addDays } from "date-fns"
 import { z } from "zod"
 
+import { cacheKeys, invalidate } from "@/lib/cache"
 import {
   formatIST,
   istCalendarMonthEnd,
@@ -450,6 +451,8 @@ export async function finalizeAndDistributeBills(
     )
 
     revalidatePath("/mess-prefect/billing")
+    revalidatePath("/expenses")
+    await invalidate(cacheKeys.billNotices())
 
     after(() =>
       sendPushToUsers(
@@ -460,7 +463,7 @@ export async function finalizeAndDistributeBills(
             2
           )}) has been added. Due by ${formatIST(dueDate, "d MMM yyyy")}.`,
           icon: "/app-icon-192.png",
-          url: "/dashboard",
+          url: "/expenses",
           tag: `monthly-bill-${audit.id}`,
         }
       ).catch((err) => console.error("Push notification failed:", err))

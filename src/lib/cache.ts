@@ -34,6 +34,11 @@ export const cacheKeys = {
   guestMealRates: (mealTime: string) => `${V}:guest-meal-rates:${mealTime}`,
   /** Every dish, priced - the tier rate card behind a guest quote. */
   menuItemPrices: () => `${V}:menu-item-prices`,
+  /**
+   * Every finalized monthly bill, identical for every boarder. A finalized
+   * audit can't be edited, so finalizing is the only thing that changes it.
+   */
+  billNotices: () => `${V}:bill-notices`,
 } as const
 
 /** Both slot keys, for clearing after a rate edit. */

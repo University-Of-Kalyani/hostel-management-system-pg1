@@ -6,11 +6,9 @@ import { haptic } from "@/lib/haptic"
 import { toast } from "@/lib/toast"
 
 import {
-  addUserAdvance,
   addUserDue,
   recordPayment,
   transferUserToAlumni,
-  type AddAdvanceInput,
   type AddDueInput,
   type RecordPaymentInput,
   type TransferToAlumniInput,
@@ -31,24 +29,6 @@ export function useRecordPayment() {
       }
     },
     onError: () => toast.error("Failed to record the payment."),
-  })
-}
-
-export function useAddUserAdvance() {
-  const router = useRouter()
-  return useMutation({
-    mutationFn: (input: AddAdvanceInput) => addUserAdvance(input),
-    onSuccess: (res) => {
-      if (res.status === "success") {
-        fireConfetti()
-        haptic()
-        toast.success(res.message)
-        router.refresh()
-      } else {
-        toast.error(res.message)
-      }
-    },
-    onError: () => toast.error("Failed to record the advance."),
   })
 }
 

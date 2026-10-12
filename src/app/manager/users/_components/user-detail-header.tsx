@@ -2,12 +2,7 @@
 
 import { useState } from "react"
 import { usePathname } from "next/navigation"
-import {
-  GraduationCap,
-  MinusCircle,
-  PiggyBank,
-  Plus,
-} from "@phosphor-icons/react"
+import { GraduationCap, MinusCircle, Plus } from "@phosphor-icons/react"
 import { format } from "date-fns"
 
 import { cn } from "@/lib/utils"
@@ -27,7 +22,6 @@ import { Loader } from "@/components/ui/loader"
 import UserAvatar from "@/components/UserAvatar"
 
 import {
-  useAddUserAdvance,
   useAddUserDue,
   useRecordPayment,
   useTransferUserToAlumni,
@@ -40,7 +34,6 @@ function inr(n: number) {
 
 export function UserDetailHeader({ data }: { data: UserSummary }) {
   const [payOpen, setPayOpen] = useState(false)
-  const [advanceOpen, setAdvanceOpen] = useState(false)
   const [dueOpen, setDueOpen] = useState(false)
   const [transferOpen, setTransferOpen] = useState(false)
   const { user, summary } = data
@@ -98,9 +91,6 @@ export function UserDetailHeader({ data }: { data: UserSummary }) {
         </Button>
         {isMessPrefect && (
           <>
-            <Button variant="outline" onClick={() => setAdvanceOpen(true)}>
-              <PiggyBank className="mr-1 h-4 w-4" /> Add advance
-            </Button>
             <Button variant="outline" onClick={() => setDueOpen(true)}>
               <MinusCircle className="mr-1 h-4 w-4" /> Add due
             </Button>
@@ -125,12 +115,6 @@ export function UserDetailHeader({ data }: { data: UserSummary }) {
 
       {isMessPrefect && (
         <>
-          <AddAdvanceDialog
-            userId={user.id}
-            currentDue={summary.currentDue}
-            open={advanceOpen}
-            onOpenChange={setAdvanceOpen}
-          />
           <AddDueDialog
             userId={user.id}
             currentDue={summary.currentDue}
@@ -261,91 +245,6 @@ function RecordPaymentDialog({
                 <Loader variant="spinner" size={16} className="mr-2" />
               )}
               Save payment
-            </Button>
-          </DialogFooter>
-        </form>
-      </DialogContent>
-    </Dialog>
-  )
-}
-
-function AddAdvanceDialog({
-  userId,
-  currentDue,
-  open,
-  onOpenChange,
-}: {
-  userId: string
-  currentDue: number
-  open: boolean
-  onOpenChange: (open: boolean) => void
-}) {
-  const { mutate, isPending } = useAddUserAdvance()
-
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>Add advance</DialogTitle>
-          <DialogDescription>
-            Current due: {inr(currentDue)}. Records money paid in advance as a
-            credit on the user&apos;s account and notifies them by email.
-          </DialogDescription>
-        </DialogHeader>
-        <form
-          onSubmit={(e) => {
-            e.preventDefault()
-            const form = new FormData(e.currentTarget)
-            mutate(
-              {
-                userId,
-                amount: Number(form.get("amount")),
-                paymentMethod: String(form.get("paymentMethod") ?? ""),
-                note: String(form.get("note") ?? ""),
-              },
-              {
-                onSuccess: (res) => {
-                  if (res.status === "success") onOpenChange(false)
-                },
-              }
-            )
-          }}
-          className="space-y-4"
-        >
-          <div className="space-y-2">
-            <Label htmlFor="advance-amount">Amount (₹)</Label>
-            <Input
-              id="advance-amount"
-              name="amount"
-              type="number"
-              min="0.01"
-              step="0.01"
-              required
-              placeholder="0.00"
-            />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="advance-method">Method (optional)</Label>
-            <Input
-              id="advance-method"
-              name="paymentMethod"
-              placeholder="Cash / UPI / Bank"
-            />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="advance-note">Note (optional)</Label>
-            <Input
-              id="advance-note"
-              name="note"
-              placeholder="e.g. Advance for next month"
-            />
-          </div>
-          <DialogFooter>
-            <Button type="submit" disabled={isPending}>
-              {isPending && (
-                <Loader variant="spinner" size={16} className="mr-2" />
-              )}
-              Save advance
             </Button>
           </DialogFooter>
         </form>
