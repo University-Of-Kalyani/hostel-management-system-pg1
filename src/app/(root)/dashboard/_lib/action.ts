@@ -36,6 +36,11 @@ export async function toggleMealStatus(
     }
   }
 
+  // A boarder turns their own meal on or off; only a manager suspends.
+  if (status !== MealStatusType.ACTIVE && status !== MealStatusType.INACTIVE) {
+    return { status: "error", message: "Invalid meal status" }
+  }
+
   const userId = session.user.id
 
   const limit = await checkRateLimit(mealToggleLimiter, `meal-toggle:${userId}`)
@@ -58,19 +63,30 @@ export async function toggleMealStatus(
       // tab) that lands after the first one already applied finds nothing
       // left to change and skips the log — so it can never write a second
       // "OFF" (or "ON") entry for the same state.
+      //
+      // SUSPENDED is excluded in the same statement: the button is disabled
+      // while suspended, but a tab left open from before the manager
+      // suspended them would otherwise quietly lift the suspension.
       const { count } = await tx.meal.updateMany({
-        where: { userId, status: { not: status } },
+        where: {
+          userId,
+          status: { notIn: [status, MealStatusType.SUSPENDED] },
+        },
         data: { status },
       })
       if (count === 0) {
-        // Either already in the requested state (fine, no-op), or this user
-        // has no meal record at all — tell those two apart instead of
-        // silently reporting success either way.
+        // Already in the requested state (fine, no-op), suspended, or no meal
+        // record at all — tell those apart instead of silently reporting
+        // success either way.
         const meal = await tx.meal.findUnique({
           where: { userId },
-          select: { id: true },
+          select: { status: true },
         })
         if (!meal) throw new Error("No meal record found for your account.")
+        if (meal.status === MealStatusType.SUSPENDED)
+          throw new Error(
+            "Your meal is suspended. Please contact the mess manager."
+          )
         return
       }
 

@@ -530,7 +530,7 @@ export async function transferUserToAlumni(
 
       await tx.meal.updateMany({
         where: { userId },
-        data: { status: MealStatusType.INACTIVE },
+        data: { status: MealStatusType.INACTIVE, guestMealSuspended: false },
       })
 
       await tx.activityLog.create({
