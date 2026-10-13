@@ -42,14 +42,16 @@ export const searchParamsSchema = z.object({
   days: z.coerce.number().int().min(0).catch(0).default(0),
   /** Roles, "."-joined by the data table's faceted filter. */
   role: z.string().optional(),
-  /** Member groups, "."-joined: boarder / staff / alumni. */
+  /** Member groups, "."-joined: boarder / alumni. */
   group: z.string().optional(),
 })
 
-/** Who a balance sits with; alumni and removed accounts are "alumni". */
+/**
+ * Who a balance sits with. Managers and prefects are boarders; alumni and
+ * removed accounts are "alumni". The Role filter tells boarders apart.
+ */
 export const MEMBER_GROUPS = {
   boarder: "Boarder",
-  staff: "Manager / prefect",
   alumni: "Alumni",
 } as const
 

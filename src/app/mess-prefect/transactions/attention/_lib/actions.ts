@@ -31,11 +31,9 @@ function groupOf(user: {
   status: UserStatusType
   deletedAt: Date | null
 }): MemberGroup {
-  if (user.status === UserStatusType.FORMA || user.deletedAt) return "alumni"
-  return user.role === UserRoleType.STUDENT ||
-    user.role === UserRoleType.TEMPORARY_BOARDER
-    ? "boarder"
-    : "staff"
+  return user.status === UserStatusType.FORMA || user.deletedAt
+    ? "alumni"
+    : "boarder"
 }
 
 /**

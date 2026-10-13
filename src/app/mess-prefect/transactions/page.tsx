@@ -78,7 +78,6 @@ const MIX_COLORS: Record<string, string> = {
 
 const DUE_GROUP_COLORS: Record<string, string> = {
   boarders: "bg-red-500",
-  staff: "bg-amber-500",
   former: "bg-muted-foreground",
 }
 

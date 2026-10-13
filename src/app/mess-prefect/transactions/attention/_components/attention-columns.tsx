@@ -92,13 +92,7 @@ export function getColumns(type: AttentionType): ColumnDef<AttentionRow>[] {
       ),
       cell: ({ row }) => (
         <Badge
-          variant={
-            row.original.group === "alumni"
-              ? "secondary"
-              : row.original.group === "staff"
-                ? "warning-light"
-                : "info-light"
-          }
+          variant={row.original.group === "alumni" ? "secondary" : "info-light"}
           size="sm"
         >
           {MEMBER_GROUPS[row.original.group]}

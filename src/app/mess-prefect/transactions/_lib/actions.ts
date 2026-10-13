@@ -27,6 +27,17 @@ const CHARGE_TYPES = new Set<BillEntryType>([
   BillEntryType.ADJUSTMENT_DEBIT,
 ])
 
+/**
+ * Everyone who eats at the mess and is billed for it. Managers and mess
+ * prefects are boarders too - leaving them out hid ~₹11k of dues.
+ */
+const BOARDER_ROLES = [
+  UserRoleType.STUDENT,
+  UserRoleType.TEMPORARY_BOARDER,
+  UserRoleType.MANAGER,
+  UserRoleType.MESS_PREFECT,
+]
+
 /** Day buckets stay readable up to a quarter; past that we roll up to months. */
 const MAX_DAILY_BUCKETS = 92
 
@@ -84,7 +95,7 @@ export async function getTransactionsOverview(search: TransactionsSearch) {
     }),
     prisma.user.count({
       where: {
-        role: UserRoleType.STUDENT,
+        role: { in: BOARDER_ROLES },
         status: UserStatusType.ACTIVE,
         deletedAt: null,
       },
@@ -121,7 +132,7 @@ export async function getTransactionsOverview(search: TransactionsSearch) {
       by: ["userId"],
       where: {
         user: {
-          role: UserRoleType.STUDENT,
+          role: { in: BOARDER_ROLES },
           status: UserStatusType.ACTIVE,
           deletedAt: null,
         },
@@ -418,18 +429,14 @@ export async function getTransactionsOverview(search: TransactionsSearch) {
 
   // Who the unpaid money sits with right now. A balance below zero is credit
   // the mess owes back, so it's counted apart rather than netted away.
+  // Managers and prefects are boarders like anyone else; the line that
+  // matters is whether they still live here.
   const DUE_GROUPS = [
     { key: "boarders", label: "Current boarders" },
-    { key: "staff", label: "Managers & prefects" },
     { key: "former", label: "Alumni & removed" },
   ] as const
   const groupOf = (member: (typeof members)[number]) =>
-    formerIds.has(member.id)
-      ? "former"
-      : member.role === UserRoleType.STUDENT ||
-          member.role === UserRoleType.TEMPORARY_BOARDER
-        ? "boarders"
-        : "staff"
+    formerIds.has(member.id) ? "former" : "boarders"
   const dueBreakdown = DUE_GROUPS.map((group) => {
     let owed = 0
     let owing = 0
