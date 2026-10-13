@@ -23,7 +23,6 @@ import { DataTableToolbar } from "@/components/data-table/data-table-toolbar"
 import { getAttentionRows, sendDuesReminders } from "../_lib/actions"
 import {
   AGEING_OPTIONS,
-  MEMBER_GROUPS,
   type AttentionRow,
   type AttentionType,
 } from "../_lib/validations"
@@ -53,15 +52,6 @@ export function AttentionTable({ rowsPromise, type }: AttentionTableProps) {
       label: "Member",
       value: "name",
       placeholder: "Search name or email...",
-    },
-    {
-      label: "Group",
-      value: "group",
-      options: Object.entries(MEMBER_GROUPS).map(([value, label]) => ({
-        label,
-        value,
-        withCount: true,
-      })),
     },
     {
       label: "Role",

@@ -112,7 +112,7 @@ export default function AppSideBar({ state, user }: AppSideBarProps) {
     // Alumni leave the users list on transfer; their dues are paid here.
     {
       title: "Alumni payments",
-      url: "transactions/attention?type=dues&group=alumni",
+      url: "transactions/attention?type=alumni",
       icon: HandCoins,
     },
   ]

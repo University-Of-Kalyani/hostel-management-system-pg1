@@ -14,11 +14,7 @@ import { DataTableColumnHeader } from "@/components/data-table/data-table-column
 import { Badge } from "@/components/reui/badge"
 import { RecordPaymentDialog } from "@/app/manager/users/_components/user-detail-header"
 
-import {
-  MEMBER_GROUPS,
-  type AttentionRow,
-  type AttentionType,
-} from "../_lib/validations"
+import type { AttentionRow, AttentionType } from "../_lib/validations"
 
 /** MESS_PREFECT -> "Mess prefect". */
 export function roleLabel(role: UserRoleType) {
@@ -87,20 +83,6 @@ export function getColumns(type: AttentionType): ColumnDef<AttentionRow>[] {
             </p>
           </div>
         </div>
-      ),
-    },
-    {
-      accessorKey: "group",
-      header: ({ column }) => (
-        <DataTableColumnHeader column={column} title="Group" />
-      ),
-      cell: ({ row }) => (
-        <Badge
-          variant={row.original.group === "alumni" ? "secondary" : "info-light"}
-          size="sm"
-        >
-          {MEMBER_GROUPS[row.original.group]}
-        </Badge>
       ),
     },
     {
