@@ -76,6 +76,12 @@ const MIX_COLORS: Record<string, string> = {
   other: "bg-gray-500",
 }
 
+const DUE_GROUP_COLORS: Record<string, string> = {
+  boarders: "bg-red-500",
+  staff: "bg-amber-500",
+  former: "bg-muted-foreground",
+}
+
 type Kpi = {
   title: string
   metric: string
@@ -102,6 +108,8 @@ export default async function TransactionsPage({
     totalCharges,
     totalCollected,
     totalOutstanding,
+    formerOutstanding,
+    dueBreakdown,
     totalFines,
     breakdown,
     monthly,
@@ -158,10 +166,13 @@ export default async function TransactionsPage({
     },
     {
       title: "Pending Dues",
-      metric: "Outstanding balance",
+      metric:
+        formerOutstanding > 0
+          ? `Current members · alumni owe ${formatMoneyShort(formerOutstanding)} more`
+          : "Current members",
       baseValue: formatMoneyShort(totalOutstanding),
       baseLabel: "Now",
-      targetValue: formatMoneyShort(range.billed - range.collected),
+      targetValue: formatMoneyShort(range.duesChange),
       targetLabel: `Net ${shortPeriod}`,
       data: sparklines.dues,
       color: "var(--color-red-500)",
@@ -418,6 +429,14 @@ export default async function TransactionsPage({
                   {formatMoney(totalCollected)}
                 </dd>
               </div>
+              {formerOutstanding > 0 ? (
+                <div className="flex items-center justify-between">
+                  <dt className="text-muted-foreground">Owed by alumni</dt>
+                  <dd className="font-medium tabular-nums">
+                    {formatMoney(formerOutstanding)}
+                  </dd>
+                </div>
+              ) : null}
               <div className="flex items-center justify-between border-t pt-2">
                 <dt className="font-medium">Pending dues</dt>
                 <dd
@@ -463,6 +482,58 @@ export default async function TransactionsPage({
           </CardContent>
         </Card>
       </div>
+
+      <Card className="min-w-0 gap-3">
+        <CardHeader>
+          <CardTitle className="text-base">Unpaid dues breakdown</CardTitle>
+          <p className="text-muted-foreground text-sm">
+            Who the unpaid balance sits with right now
+          </p>
+        </CardHeader>
+        <CardContent className="space-y-5">
+          <SegmentedBar
+            showTicks={false}
+            segments={dueBreakdown.map((group) => ({
+              key: group.key,
+              label: group.label,
+              value: group.owed,
+              className: DUE_GROUP_COLORS[group.key],
+            }))}
+            formatValue={formatMoneyShort}
+            emptyLabel="Nobody owes anything right now."
+          />
+          <dl className="divide-border divide-y text-sm">
+            {dueBreakdown.map((group) => (
+              <div
+                key={group.key}
+                className="flex items-center justify-between gap-3 py-2.5"
+              >
+                <dt className="min-w-0">
+                  <span className="font-medium">{group.label}</span>
+                  <span className="text-muted-foreground block text-xs">
+                    {group.owing}{" "}
+                    {group.owing === 1 ? "person owes" : "people owe"}
+                    {group.credit > 0
+                      ? ` · ${formatMoney(group.credit)} in credit`
+                      : ""}
+                  </span>
+                </dt>
+                <dd className="font-semibold tabular-nums">
+                  {formatMoney(group.owed)}
+                </dd>
+              </div>
+            ))}
+            <div className="flex items-center justify-between gap-3 pt-2.5">
+              <dt className="font-medium">Total unpaid</dt>
+              <dd className="font-bold text-red-600 tabular-nums dark:text-red-400">
+                {formatMoney(
+                  dueBreakdown.reduce((sum, group) => sum + group.owed, 0)
+                )}
+              </dd>
+            </div>
+          </dl>
+        </CardContent>
+      </Card>
 
       {/* Default stretch (no items-start) keeps both cards the same height. */}
       <div className="grid gap-6 lg:grid-cols-3">
