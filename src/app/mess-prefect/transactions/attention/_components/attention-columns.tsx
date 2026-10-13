@@ -14,7 +14,7 @@ import { DataTableColumnHeader } from "@/components/data-table/data-table-column
 import { Badge } from "@/components/reui/badge"
 import { RecordPaymentDialog } from "@/app/manager/users/_components/user-detail-header"
 
-import type { AttentionRow, AttentionType } from "../_lib/validations"
+import type { AttentionRow } from "../_lib/validations"
 
 /** MESS_PREFECT -> "Mess prefect". */
 export function roleLabel(role: UserRoleType) {
@@ -37,7 +37,7 @@ function initials(name: string) {
   )
 }
 
-export function getColumns(type: AttentionType): ColumnDef<AttentionRow>[] {
+export function getColumns(): ColumnDef<AttentionRow>[] {
   return [
     {
       id: "select",
@@ -150,10 +150,7 @@ export function getColumns(type: AttentionType): ColumnDef<AttentionRow>[] {
     {
       accessorKey: "amount",
       header: ({ column }) => (
-        <DataTableColumnHeader
-          column={column}
-          title={type === "overdue" ? "Overdue amount" : "Outstanding"}
-        />
+        <DataTableColumnHeader column={column} title="Outstanding" />
       ),
       cell: ({ row }) => (
         <span

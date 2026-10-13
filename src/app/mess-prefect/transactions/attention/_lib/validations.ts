@@ -8,10 +8,6 @@ export const ATTENTION_TABS = {
     description:
       "Everyone still at the hostel carrying an outstanding balance, managers and prefects included.",
   },
-  overdue: {
-    label: "Overdue bills",
-    description: "Unpaid charges that are already past their due date.",
-  },
   alumni: {
     label: "Alumni dues",
     description:
@@ -37,10 +33,7 @@ export const AGEING_OPTIONS = [
 ] as const
 
 export const searchParamsSchema = z.object({
-  type: z
-    .enum(["dues", "overdue", "alumni"])
-    .catch(DEFAULT_TYPE)
-    .default(DEFAULT_TYPE),
+  type: z.enum(["dues", "alumni"]).catch(DEFAULT_TYPE).default(DEFAULT_TYPE),
   page: z.coerce.number().int().min(1).catch(1).default(1),
   per_page: z.coerce.number().int().min(1).max(100).catch(10).default(10),
   sort: z.string().optional(),
@@ -59,7 +52,7 @@ export type AttentionSearch = z.infer<typeof searchParamsSchema>
 
 export const reminderSchema = z.object({
   userIds: z.array(z.string().min(1)).min(1, "Select at least one boarder."),
-  type: z.enum(["dues", "overdue", "alumni"]),
+  type: z.enum(["dues", "alumni"]),
 })
 
 export type SendRemindersInput = z.input<typeof reminderSchema>
@@ -71,7 +64,7 @@ export type AttentionRow = {
   image: string | null
   role: UserRoleType
   group: MemberGroup
-  /** Outstanding balance for `dues`, overdue total for `overdue`. */
+  /** Outstanding balance. */
   amount: number
   /** Full outstanding balance, whichever tab - what a payment is set against. */
   outstanding: number

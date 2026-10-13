@@ -66,7 +66,6 @@ export async function getTransactionsOverview(search: TransactionsSearch) {
     bills,
     recent,
     activeBoarders,
-    overdueBills,
     pendingGuestMeals,
     guestMealCharges,
     fineCharges,
@@ -98,13 +97,6 @@ export async function getTransactionsOverview(search: TransactionsSearch) {
         role: { in: BOARDER_ROLES },
         status: UserStatusType.ACTIVE,
         deletedAt: null,
-      },
-    }),
-    prisma.userBill.count({
-      where: {
-        isPaid: false,
-        dueDate: { lt: now },
-        type: { in: [...CHARGE_TYPES] },
       },
     }),
     prisma.guestMeal.count({
@@ -565,7 +557,6 @@ export async function getTransactionsOverview(search: TransactionsSearch) {
       withDues: boardersWithDues,
     },
     attention: {
-      overdueBills,
       boardersWithDues,
     },
     guestMeals,

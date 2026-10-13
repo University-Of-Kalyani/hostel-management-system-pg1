@@ -38,7 +38,7 @@ export function AttentionTable({ rowsPromise, type }: AttentionTableProps) {
   const router = useRouter()
   const [isPending, startTransition] = React.useTransition()
 
-  const columns = React.useMemo(() => getColumns(type), [type])
+  const columns = React.useMemo(() => getColumns(), [])
 
   // The ageing filter drives a server query, so this update must reach the
   // server: shallow false, unlike the table's own client-side state.

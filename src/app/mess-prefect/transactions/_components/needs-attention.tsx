@@ -1,16 +1,10 @@
 import Link from "next/link"
 import type { Icon } from "@phosphor-icons/react"
-import {
-  CaretRight,
-  CheckCircle,
-  Receipt,
-  Users,
-} from "@phosphor-icons/react/ssr"
+import { CaretRight, CheckCircle, Users } from "@phosphor-icons/react/ssr"
 
 import { cn } from "@/lib/utils"
 
 interface NeedsAttentionProps {
-  overdueBills: number
   boardersWithDues: number
 }
 
@@ -26,22 +20,13 @@ type AttentionItem = {
  * absent: a fine charge already rolls into a boarder's balance, so listing it
  * separately would count the same money twice.
  */
-export function NeedsAttention({
-  overdueBills,
-  boardersWithDues,
-}: NeedsAttentionProps) {
+export function NeedsAttention({ boardersWithDues }: NeedsAttentionProps) {
   const items: AttentionItem[] = [
     {
       label: "Boarders with dues",
       count: boardersWithDues,
       href: "/mess-prefect/transactions/attention?type=dues",
       icon: Users,
-    },
-    {
-      label: "Overdue bills",
-      count: overdueBills,
-      href: "/mess-prefect/transactions/attention?type=overdue",
-      icon: Receipt,
     },
   ]
 

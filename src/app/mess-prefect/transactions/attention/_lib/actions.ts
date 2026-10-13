@@ -100,13 +100,10 @@ async function buildRows(
   for (const [userId, boarder] of byUser) {
     const position = settleDues(boarder.rows, now)
 
-    // Alumni have a tab of their own; the other two are people still here.
+    // Alumni have a tab of their own; the dues tab is people still here.
     if ((type === "alumni") !== (boarder.group === "alumni")) continue
 
-    // The dues and alumni tabs are everyone carrying a balance; the overdue
-    // tab is only those whose unpaid charges have already fallen due.
-    const amount =
-      type === "overdue" ? position.overdueAmount : position.outstanding
+    const amount = position.outstanding
     if (amount <= 0.005) continue
 
     rows.push({
