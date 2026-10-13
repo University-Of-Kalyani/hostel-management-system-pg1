@@ -187,10 +187,14 @@ export function getColumns(type: AttentionType): ColumnDef<AttentionRow>[] {
     {
       id: "actions",
       header: () => <span className="sr-only">Actions</span>,
-      // Alumni leave the users list on transfer, so this is where their
-      // payments get recorded. Same action as the profile page: it locks the
-      // ledger and builds on the current balance.
-      cell: ({ row }) => <RecordPaymentCell row={row.original} />,
+      // Alumni leave the users list on transfer, so this is the only place
+      // their payments can be recorded; boarders are paid from their profile.
+      // Same action as the profile page: it locks the ledger and builds on
+      // the current balance.
+      cell: ({ row }) =>
+        row.original.group === "alumni" ? (
+          <RecordPaymentCell row={row.original} />
+        ) : null,
       enableSorting: false,
       enableHiding: false,
     },

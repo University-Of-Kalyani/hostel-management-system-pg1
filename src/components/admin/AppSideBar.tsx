@@ -109,11 +109,10 @@ export default function AppSideBar({ state, user }: AppSideBarProps) {
   const financeItems = [
     { title: "Billing", url: "billing", icon: Receipt },
     { title: "Transactions", url: "transactions", icon: Wallet },
-    // Everyone's balance, alumni included, with Record payment on each row -
-    // the only place a transferred alumnus can still be paid.
+    // Alumni leave the users list on transfer; their dues are paid here.
     {
-      title: "Dues & payments",
-      url: "transactions/attention",
+      title: "Alumni payments",
+      url: "transactions/attention?type=dues&group=alumni",
       icon: HandCoins,
     },
   ]
