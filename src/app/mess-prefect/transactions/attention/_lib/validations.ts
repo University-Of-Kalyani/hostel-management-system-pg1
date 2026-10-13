@@ -75,6 +75,8 @@ export type AttentionRow = {
   group: MemberGroup
   /** Outstanding balance for `dues`, overdue total for `overdue`. */
   amount: number
+  /** Full outstanding balance, whichever tab - what a payment is set against. */
+  outstanding: number
   /** Unpaid bills past their due date. */
   overdueCount: number
   oldestDueDate: Date | null

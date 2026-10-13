@@ -115,6 +115,7 @@ async function buildRows(
       role: boarder.role,
       group: boarder.group,
       amount,
+      outstanding: position.outstanding,
       overdueCount: position.overdueCount,
       oldestDueDate: position.oldestDueDate,
       daysOverdue: position.oldestDueDate

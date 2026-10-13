@@ -1,14 +1,18 @@
 "use client"
 
+import * as React from "react"
+import { Plus } from "@phosphor-icons/react"
 import type { ColumnDef } from "@tanstack/react-table"
 
 import { formatIST } from "@/lib/date"
 import type { UserRoleType } from "@/lib/generated/prisma"
 import { cn } from "@/lib/utils"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
+import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
 import { DataTableColumnHeader } from "@/components/data-table/data-table-column-header"
 import { Badge } from "@/components/reui/badge"
+import { RecordPaymentDialog } from "@/app/manager/users/_components/user-detail-header"
 
 import {
   MEMBER_GROUPS,
@@ -180,5 +184,39 @@ export function getColumns(type: AttentionType): ColumnDef<AttentionRow>[] {
         </span>
       ),
     },
+    {
+      id: "actions",
+      header: () => <span className="sr-only">Actions</span>,
+      // Alumni leave the users list on transfer, so this is where their
+      // payments get recorded. Same action as the profile page: it locks the
+      // ledger and builds on the current balance.
+      cell: ({ row }) => <RecordPaymentCell row={row.original} />,
+      enableSorting: false,
+      enableHiding: false,
+    },
   ]
+}
+
+function RecordPaymentCell({ row }: { row: AttentionRow }) {
+  const [open, setOpen] = React.useState(false)
+  return (
+    <>
+      <Button
+        type="button"
+        size="sm"
+        variant="outline"
+        className="whitespace-nowrap"
+        onClick={() => setOpen(true)}
+      >
+        <Plus className="size-4" />
+        Record payment
+      </Button>
+      <RecordPaymentDialog
+        userId={row.userId}
+        currentDue={row.outstanding}
+        open={open}
+        onOpenChange={setOpen}
+      />
+    </>
+  )
 }
