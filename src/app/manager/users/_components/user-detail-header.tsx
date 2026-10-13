@@ -168,7 +168,8 @@ function Tile({
   )
 }
 
-function RecordPaymentDialog({
+/** Also used from the dues list, the only place alumni can still be paid. */
+export function RecordPaymentDialog({
   userId,
   currentDue,
   open,

@@ -6,11 +6,12 @@ export const ATTENTION_TABS = {
   dues: {
     label: "Everyone with dues",
     description:
-      "Everyone carrying an outstanding balance: boarders, managers, prefects and alumni.",
+      "Everyone still at the hostel carrying an outstanding balance, managers and prefects included.",
   },
-  overdue: {
-    label: "Overdue bills",
-    description: "Unpaid charges that are already past their due date.",
+  alumni: {
+    label: "Alumni dues",
+    description:
+      "Alumni who left with an outstanding balance. Their payments are recorded here.",
   },
 } as const
 
@@ -32,7 +33,7 @@ export const AGEING_OPTIONS = [
 ] as const
 
 export const searchParamsSchema = z.object({
-  type: z.enum(["dues", "overdue"]).catch(DEFAULT_TYPE).default(DEFAULT_TYPE),
+  type: z.enum(["dues", "alumni"]).catch(DEFAULT_TYPE).default(DEFAULT_TYPE),
   page: z.coerce.number().int().min(1).catch(1).default(1),
   per_page: z.coerce.number().int().min(1).max(100).catch(10).default(10),
   sort: z.string().optional(),
@@ -42,26 +43,16 @@ export const searchParamsSchema = z.object({
   days: z.coerce.number().int().min(0).catch(0).default(0),
   /** Roles, "."-joined by the data table's faceted filter. */
   role: z.string().optional(),
-  /** Member groups, "."-joined: boarder / alumni. */
-  group: z.string().optional(),
 })
 
-/**
- * Who a balance sits with. Managers and prefects are boarders; alumni and
- * removed accounts are "alumni". The Role filter tells boarders apart.
- */
-export const MEMBER_GROUPS = {
-  boarder: "Boarder",
-  alumni: "Alumni",
-} as const
-
-export type MemberGroup = keyof typeof MEMBER_GROUPS
+/** Managers and prefects are boarders; alumni and removed accounts aren't. */
+export type MemberGroup = "boarder" | "alumni"
 
 export type AttentionSearch = z.infer<typeof searchParamsSchema>
 
 export const reminderSchema = z.object({
   userIds: z.array(z.string().min(1)).min(1, "Select at least one boarder."),
-  type: z.enum(["dues", "overdue"]),
+  type: z.enum(["dues", "alumni"]),
 })
 
 export type SendRemindersInput = z.input<typeof reminderSchema>
@@ -73,8 +64,10 @@ export type AttentionRow = {
   image: string | null
   role: UserRoleType
   group: MemberGroup
-  /** Outstanding balance for `dues`, overdue total for `overdue`. */
+  /** Outstanding balance. */
   amount: number
+  /** Full outstanding balance, whichever tab - what a payment is set against. */
+  outstanding: number
   /** Unpaid bills past their due date. */
   overdueCount: number
   oldestDueDate: Date | null

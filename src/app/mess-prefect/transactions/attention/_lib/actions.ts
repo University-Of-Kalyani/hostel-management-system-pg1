@@ -17,7 +17,6 @@ import { parseEnumList } from "@/lib/utils"
 
 import { settleDues } from "./dues"
 import {
-  MEMBER_GROUPS,
   reminderSchema,
   type AttentionResponse,
   type AttentionRow,
@@ -101,10 +100,10 @@ async function buildRows(
   for (const [userId, boarder] of byUser) {
     const position = settleDues(boarder.rows, now)
 
-    // The dues tab is everyone carrying a balance; the overdue tab is only
-    // those whose unpaid charges have already fallen due.
-    const amount =
-      type === "overdue" ? position.overdueAmount : position.outstanding
+    // Alumni have a tab of their own; the dues tab is people still here.
+    if ((type === "alumni") !== (boarder.group === "alumni")) continue
+
+    const amount = position.outstanding
     if (amount <= 0.005) continue
 
     rows.push({
@@ -115,6 +114,7 @@ async function buildRows(
       role: boarder.role,
       group: boarder.group,
       amount,
+      outstanding: position.outstanding,
       overdueCount: position.overdueCount,
       oldestDueDate: position.oldestDueDate,
       daysOverdue: position.oldestDueDate
@@ -132,8 +132,6 @@ function compare(a: AttentionRow, b: AttentionRow, column: string) {
       return a.name.localeCompare(b.name)
     case "role":
       return a.role.localeCompare(b.role)
-    case "group":
-      return a.group.localeCompare(b.group)
     case "overdueCount":
       return a.overdueCount - b.overdueCount
     case "daysOverdue":
@@ -157,17 +155,6 @@ export async function getAttentionRows(
 
   const roles = parseEnumList(input.role, UserRoleType)
   if (roles.length > 0) rows = rows.filter((row) => roles.includes(row.role))
-
-  const groups = parseEnumList(
-    input.group,
-    Object.fromEntries(Object.keys(MEMBER_GROUPS).map((g) => [g, g])) as Record<
-      string,
-      MemberGroup
-    >
-  )
-  if (groups.length > 0) {
-    rows = rows.filter((row) => groups.includes(row.group))
-  }
 
   if (input.name) {
     const needle = input.name.toLowerCase()

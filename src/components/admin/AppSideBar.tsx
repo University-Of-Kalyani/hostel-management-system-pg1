@@ -11,6 +11,7 @@ import {
   EnvelopeSimple,
   FileText as FileCheck,
   Gavel,
+  HandCoins,
   House as Home,
   SignOut as LogOut,
   Megaphone,
@@ -108,6 +109,12 @@ export default function AppSideBar({ state, user }: AppSideBarProps) {
   const financeItems = [
     { title: "Billing", url: "billing", icon: Receipt },
     { title: "Transactions", url: "transactions", icon: Wallet },
+    // Alumni leave the users list on transfer; their dues are paid here.
+    {
+      title: "Alumni payments",
+      url: "transactions/attention?type=alumni",
+      icon: HandCoins,
+    },
   ]
 
   const administrationItems = [

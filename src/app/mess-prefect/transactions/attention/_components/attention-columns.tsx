@@ -1,20 +1,20 @@
 "use client"
 
+import * as React from "react"
+import { Plus } from "@phosphor-icons/react"
 import type { ColumnDef } from "@tanstack/react-table"
 
 import { formatIST } from "@/lib/date"
 import type { UserRoleType } from "@/lib/generated/prisma"
 import { cn } from "@/lib/utils"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
+import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
 import { DataTableColumnHeader } from "@/components/data-table/data-table-column-header"
 import { Badge } from "@/components/reui/badge"
+import { RecordPaymentDialog } from "@/app/manager/users/_components/user-detail-header"
 
-import {
-  MEMBER_GROUPS,
-  type AttentionRow,
-  type AttentionType,
-} from "../_lib/validations"
+import type { AttentionRow } from "../_lib/validations"
 
 /** MESS_PREFECT -> "Mess prefect". */
 export function roleLabel(role: UserRoleType) {
@@ -37,7 +37,7 @@ function initials(name: string) {
   )
 }
 
-export function getColumns(type: AttentionType): ColumnDef<AttentionRow>[] {
+export function getColumns(): ColumnDef<AttentionRow>[] {
   return [
     {
       id: "select",
@@ -83,20 +83,6 @@ export function getColumns(type: AttentionType): ColumnDef<AttentionRow>[] {
             </p>
           </div>
         </div>
-      ),
-    },
-    {
-      accessorKey: "group",
-      header: ({ column }) => (
-        <DataTableColumnHeader column={column} title="Group" />
-      ),
-      cell: ({ row }) => (
-        <Badge
-          variant={row.original.group === "alumni" ? "secondary" : "info-light"}
-          size="sm"
-        >
-          {MEMBER_GROUPS[row.original.group]}
-        </Badge>
       ),
     },
     {
@@ -164,10 +150,7 @@ export function getColumns(type: AttentionType): ColumnDef<AttentionRow>[] {
     {
       accessorKey: "amount",
       header: ({ column }) => (
-        <DataTableColumnHeader
-          column={column}
-          title={type === "overdue" ? "Overdue amount" : "Outstanding"}
-        />
+        <DataTableColumnHeader column={column} title="Outstanding" />
       ),
       cell: ({ row }) => (
         <span
@@ -180,5 +163,43 @@ export function getColumns(type: AttentionType): ColumnDef<AttentionRow>[] {
         </span>
       ),
     },
+    {
+      id: "actions",
+      header: () => <span className="sr-only">Actions</span>,
+      // Alumni leave the users list on transfer, so this is the only place
+      // their payments can be recorded; boarders are paid from their profile.
+      // Same action as the profile page: it locks the ledger and builds on
+      // the current balance.
+      cell: ({ row }) =>
+        row.original.group === "alumni" ? (
+          <RecordPaymentCell row={row.original} />
+        ) : null,
+      enableSorting: false,
+      enableHiding: false,
+    },
   ]
+}
+
+function RecordPaymentCell({ row }: { row: AttentionRow }) {
+  const [open, setOpen] = React.useState(false)
+  return (
+    <>
+      <Button
+        type="button"
+        size="sm"
+        variant="outline"
+        className="whitespace-nowrap"
+        onClick={() => setOpen(true)}
+      >
+        <Plus className="size-4" />
+        Record payment
+      </Button>
+      <RecordPaymentDialog
+        userId={row.userId}
+        currentDue={row.outstanding}
+        open={open}
+        onOpenChange={setOpen}
+      />
+    </>
+  )
 }

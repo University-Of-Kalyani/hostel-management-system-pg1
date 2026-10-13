@@ -23,7 +23,6 @@ import { DataTableToolbar } from "@/components/data-table/data-table-toolbar"
 import { getAttentionRows, sendDuesReminders } from "../_lib/actions"
 import {
   AGEING_OPTIONS,
-  MEMBER_GROUPS,
   type AttentionRow,
   type AttentionType,
 } from "../_lib/validations"
@@ -39,7 +38,7 @@ export function AttentionTable({ rowsPromise, type }: AttentionTableProps) {
   const router = useRouter()
   const [isPending, startTransition] = React.useTransition()
 
-  const columns = React.useMemo(() => getColumns(type), [type])
+  const columns = React.useMemo(() => getColumns(), [])
 
   // The ageing filter drives a server query, so this update must reach the
   // server: shallow false, unlike the table's own client-side state.
@@ -53,15 +52,6 @@ export function AttentionTable({ rowsPromise, type }: AttentionTableProps) {
       label: "Member",
       value: "name",
       placeholder: "Search name or email...",
-    },
-    {
-      label: "Group",
-      value: "group",
-      options: Object.entries(MEMBER_GROUPS).map(([value, label]) => ({
-        label,
-        value,
-        withCount: true,
-      })),
     },
     {
       label: "Role",
