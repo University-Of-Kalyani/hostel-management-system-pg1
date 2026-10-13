@@ -27,6 +27,17 @@ const CHARGE_TYPES = new Set<BillEntryType>([
   BillEntryType.ADJUSTMENT_DEBIT,
 ])
 
+/**
+ * Everyone who eats at the mess and is billed for it. Managers and mess
+ * prefects are boarders too - leaving them out hid ~₹11k of dues.
+ */
+const BOARDER_ROLES = [
+  UserRoleType.STUDENT,
+  UserRoleType.TEMPORARY_BOARDER,
+  UserRoleType.MANAGER,
+  UserRoleType.MESS_PREFECT,
+]
+
 /** Day buckets stay readable up to a quarter; past that we roll up to months. */
 const MAX_DAILY_BUCKETS = 92
 
@@ -60,9 +71,10 @@ export async function getTransactionsOverview(search: TransactionsSearch) {
     guestMealCharges,
     fineCharges,
     balances,
+    members,
   ] = await Promise.all([
     prisma.userBill.findMany({
-      select: { type: true, amount: true, issueDate: true },
+      select: { userId: true, type: true, amount: true, issueDate: true },
     }),
     prisma.userBill.findMany({
       where: { issueDate: { gte: period.from, lte: period.to } },
@@ -83,7 +95,7 @@ export async function getTransactionsOverview(search: TransactionsSearch) {
     }),
     prisma.user.count({
       where: {
-        role: UserRoleType.STUDENT,
+        role: { in: BOARDER_ROLES },
         status: UserStatusType.ACTIVE,
         deletedAt: null,
       },
@@ -120,14 +132,28 @@ export async function getTransactionsOverview(search: TransactionsSearch) {
       by: ["userId"],
       where: {
         user: {
-          role: UserRoleType.STUDENT,
+          role: { in: BOARDER_ROLES },
           status: UserStatusType.ACTIVE,
           deletedAt: null,
         },
       },
       _sum: { amount: true },
     }),
+    // Everyone, for sorting balances into who owes them. ~50 rows.
+    prisma.user.findMany({
+      select: { id: true, role: true, status: true, deletedAt: true },
+    }),
   ])
+
+  // Alumni and removed accounts. Their payments and charges are real history
+  // (they stay in every total), but what they still owe is not the mess's
+  // current dues - it inflated "Pending Dues" by ~₹24k.
+  const formerIds = new Set(
+    members
+      .filter((m) => m.status === UserStatusType.FORMA || m.deletedAt !== null)
+      .map((m) => m.id)
+  )
+  const balanceByUser = new Map<string, number>()
 
   let meal = 0
   let guest = 0
@@ -153,6 +179,8 @@ export async function getTransactionsOverview(search: TransactionsSearch) {
     fine: number
     other: number
     payment: number
+    /** Net movement on former members' balances, kept out of the dues line. */
+    former: number
   }[]
 
   if (byMonth) {
@@ -167,6 +195,7 @@ export async function getTransactionsOverview(search: TransactionsSearch) {
         fine: 0,
         other: 0,
         payment: 0,
+        former: 0,
       })
       cursor = addMonths(cursor, 1)
     }
@@ -181,6 +210,7 @@ export async function getTransactionsOverview(search: TransactionsSearch) {
         fine: 0,
         other: 0,
         payment: 0,
+        former: 0,
       })
     }
   }
@@ -188,6 +218,8 @@ export async function getTransactionsOverview(search: TransactionsSearch) {
   const seriesIndex = new Map(series.map((point, i) => [point.key, i]))
 
   let openingBalance = 0
+  let openingFormer = 0
+  let formerOutstanding = 0
   let earliestBill: Date | null = null
   const range = { billed: 0, collected: 0, transactions: 0, chargeCount: 0 }
   const prior = { billed: 0, collected: 0, transactions: 0, chargeCount: 0 }
@@ -230,12 +262,19 @@ export async function getTransactionsOverview(search: TransactionsSearch) {
     const inRange = at >= period.from.getTime() && at <= period.to.getTime()
     const inPrior = at >= priorFrom.getTime() && at <= priorTo.getTime()
     const isCharge = CHARGE_TYPES.has(bill.type)
+    const signed = isCharge ? bill.amount : -Math.abs(bill.amount)
+    const isFormer = formerIds.has(bill.userId)
+    if (isFormer) formerOutstanding += signed
+    balanceByUser.set(
+      bill.userId,
+      (balanceByUser.get(bill.userId) ?? 0) + signed
+    )
 
     // Balance carried into the window, so the dues sparkline starts from the
     // real outstanding figure rather than from zero.
     if (at < period.from.getTime()) {
-      if (isCharge) openingBalance += bill.amount
-      else openingBalance -= Math.abs(bill.amount)
+      openingBalance += signed
+      if (isFormer) openingFormer += signed
     }
 
     if (!inRange && !inPrior) continue
@@ -273,6 +312,7 @@ export async function getTransactionsOverview(search: TransactionsSearch) {
     const index = seriesIndex.get(pointKey)
     if (index !== undefined) {
       const point = series[index]!
+      if (isFormer) point.former += signed
       switch (bill.type) {
         case BillEntryType.MEAL_CHARGE:
           point.meal += bill.amount
@@ -387,8 +427,37 @@ export async function getTransactionsOverview(search: TransactionsSearch) {
     top: withUsers(topFineRows),
   }
 
+  // Who the unpaid money sits with right now. A balance below zero is credit
+  // the mess owes back, so it's counted apart rather than netted away.
+  // Managers and prefects are boarders like anyone else; the line that
+  // matters is whether they still live here.
+  const DUE_GROUPS = [
+    { key: "boarders", label: "Current boarders" },
+    { key: "former", label: "Alumni & removed" },
+  ] as const
+  const groupOf = (member: (typeof members)[number]) =>
+    formerIds.has(member.id) ? "former" : "boarders"
+  const dueBreakdown = DUE_GROUPS.map((group) => {
+    let owed = 0
+    let owing = 0
+    let credit = 0
+    for (const member of members) {
+      if (groupOf(member) !== group.key) continue
+      const balance = balanceByUser.get(member.id) ?? 0
+      if (balance > 0.005) {
+        owed += balance
+        owing += 1
+      } else if (balance < -0.005) {
+        credit += -balance
+      }
+    }
+    return { ...group, owed, owing, credit }
+  })
+
   const totalCharges = meal + guest + fine + other
-  const outstanding = Math.max(0, totalCharges - collected)
+  // What current members owe. Former members' balances are reported beside
+  // it, not inside it.
+  const outstanding = Math.max(0, totalCharges - collected - formerOutstanding)
 
   const breakdown = [
     { category: "meal", label: "Meal charges", amount: meal },
@@ -414,9 +483,11 @@ export async function getTransactionsOverview(search: TransactionsSearch) {
   const billedAt = (point: (typeof series)[number]) =>
     point.meal + point.guest + point.fine + point.other
 
-  let running = openingBalance
+  // Same population as `outstanding`, so the line ends where the figure is.
+  const openingDues = openingBalance - openingFormer
+  let running = openingDues
   const duesPoints = series.map((point) => {
-    running += billedAt(point) - point.payment
+    running += billedAt(point) - point.payment - point.former
     return { value: Math.round(running) }
   })
 
@@ -442,6 +513,8 @@ export async function getTransactionsOverview(search: TransactionsSearch) {
     totalCharges,
     totalCollected: collected,
     totalOutstanding: outstanding,
+    formerOutstanding: Math.max(0, formerOutstanding),
+    dueBreakdown,
     totalFines: fine,
     breakdown,
     monthly,
@@ -457,6 +530,7 @@ export async function getTransactionsOverview(search: TransactionsSearch) {
       collected: range.collected,
       transactions: range.transactions,
       fines: rangeFines,
+      duesChange: running - openingDues,
       avgCharge: average(range.billed, range.chargeCount),
       collectionRate: rate(range.billed, range.collected),
       deltas: {

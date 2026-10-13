@@ -13,21 +13,28 @@ import {
 } from "@/lib/generated/prisma"
 import prisma from "@/lib/prisma"
 import { sendPushToUsers } from "@/lib/push"
+import { parseEnumList } from "@/lib/utils"
 
 import { settleDues } from "./dues"
 import {
+  MEMBER_GROUPS,
   reminderSchema,
   type AttentionResponse,
   type AttentionRow,
   type AttentionSearch,
+  type MemberGroup,
   type SendRemindersInput,
 } from "./validations"
 
-const ACTIVE_BOARDER = {
-  role: UserRoleType.STUDENT,
-  status: UserStatusType.ACTIVE,
-  deletedAt: null,
-} as const
+function groupOf(user: {
+  role: UserRoleType
+  status: UserStatusType
+  deletedAt: Date | null
+}): MemberGroup {
+  return user.status === UserStatusType.FORMA || user.deletedAt
+    ? "alumni"
+    : "boarder"
+}
 
 /**
  * Builds the full boarder-level list for a tab.
@@ -42,29 +49,47 @@ async function buildRows(
 ): Promise<AttentionRow[]> {
   const now = new Date()
 
-  // The whole ledger for active boarders, because a payment is not tied to the
-  // charge it settles - the position only falls out once each boarder's rows
-  // are read together. One hostel's ledger, so this stays small.
+  // The whole ledger, for everyone - managers, prefects and alumni owe the
+  // mess too, and a list of students only hid ~₹36k of it. A payment is not
+  // tied to the charge it settles, so the position only falls out once each
+  // person's rows are read together. One hostel's ledger, so this stays small.
   const entries = await prisma.userBill.findMany({
-    where: { user: ACTIVE_BOARDER },
     select: {
       userId: true,
       amount: true,
       dueDate: true,
       issueDate: true,
-      user: { select: { name: true, email: true, image: true } },
+      user: {
+        select: {
+          name: true,
+          email: true,
+          image: true,
+          role: true,
+          status: true,
+          deletedAt: true,
+        },
+      },
     },
   })
 
   const byUser = new Map<
     string,
-    { name: string; email: string; image: string | null; rows: typeof entries }
+    {
+      name: string
+      email: string
+      image: string | null
+      role: UserRoleType
+      group: MemberGroup
+      rows: typeof entries
+    }
   >()
   for (const entry of entries) {
     const bucket = byUser.get(entry.userId) ?? {
       name: entry.user.name ?? "Boarder",
       email: entry.user.email,
       image: entry.user.image,
+      role: entry.user.role,
+      group: groupOf(entry.user),
       rows: [],
     }
     bucket.rows.push(entry)
@@ -87,6 +112,8 @@ async function buildRows(
       name: boarder.name,
       email: boarder.email,
       image: boarder.image,
+      role: boarder.role,
+      group: boarder.group,
       amount,
       overdueCount: position.overdueCount,
       oldestDueDate: position.oldestDueDate,
@@ -103,6 +130,10 @@ function compare(a: AttentionRow, b: AttentionRow, column: string) {
   switch (column) {
     case "name":
       return a.name.localeCompare(b.name)
+    case "role":
+      return a.role.localeCompare(b.role)
+    case "group":
+      return a.group.localeCompare(b.group)
     case "overdueCount":
       return a.overdueCount - b.overdueCount
     case "daysOverdue":
@@ -122,6 +153,20 @@ export async function getAttentionRows(
 
   if (input.days > 0) {
     rows = rows.filter((row) => row.daysOverdue >= input.days)
+  }
+
+  const roles = parseEnumList(input.role, UserRoleType)
+  if (roles.length > 0) rows = rows.filter((row) => roles.includes(row.role))
+
+  const groups = parseEnumList(
+    input.group,
+    Object.fromEntries(Object.keys(MEMBER_GROUPS).map((g) => [g, g])) as Record<
+      string,
+      MemberGroup
+    >
+  )
+  if (groups.length > 0) {
+    rows = rows.filter((row) => groups.includes(row.group))
   }
 
   if (input.name) {

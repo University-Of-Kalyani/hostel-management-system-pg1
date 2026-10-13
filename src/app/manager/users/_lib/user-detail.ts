@@ -60,8 +60,20 @@ export async function getUserSummary(userId: string) {
       orderBy: { createdAt: "desc" },
       select: { balanceRemaining: true },
     }),
+    // Everything that brought the balance down. The old "Add advance" button
+    // and the opening balances wrote ADJUSTMENT_CREDIT rather than PAYMENT;
+    // counting only PAYMENT left charged - paid ≠ due for 19 boarders.
     prisma.userBill.aggregate({
-      where: { userId, type: BillEntryType.PAYMENT },
+      where: {
+        userId,
+        type: {
+          in: [
+            BillEntryType.PAYMENT,
+            BillEntryType.REFUND,
+            BillEntryType.ADJUSTMENT_CREDIT,
+          ],
+        },
+      },
       _sum: { amount: true },
     }),
     prisma.userBill.aggregate({

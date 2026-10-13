@@ -383,6 +383,19 @@ export async function finalizeAndDistributeBills(
         message: "You can only finalize a month after it has ended.",
       }
     }
+    // Months are billed in order. June 2026 was billed by hand before this
+    // workflow existed and its audit was never finalized; finalizing it now
+    // would charge every current boarder for June a second time.
+    const laterFinalized = await prisma.audit.findFirst({
+      where: { date: { gt: audit.date }, approvedAt: { not: null } },
+      select: { date: true },
+    })
+    if (laterFinalized) {
+      return {
+        status: "error",
+        message: `${formatIST(audit.date, "MMMM yyyy")} can't be finalized: ${formatIST(laterFinalized.date, "MMMM yyyy")} is already billed, so this month was settled outside the billing workflow.`,
+      }
+    }
 
     const excludedSet = new Set(audit.excludedUserIds)
     const activeUsers = (

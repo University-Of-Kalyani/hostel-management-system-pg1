@@ -6,6 +6,7 @@ import type { DataTableFilterField } from "@/types"
 import { PaperPlaneTilt } from "@phosphor-icons/react"
 import { parseAsInteger, parseAsString, useQueryStates } from "nuqs"
 
+import { UserRoleType } from "@/lib/generated/prisma"
 import { toast } from "@/lib/toast"
 import { useDataTable } from "@/hooks/use-data-table"
 import { Button } from "@/components/ui/button"
@@ -22,10 +23,11 @@ import { DataTableToolbar } from "@/components/data-table/data-table-toolbar"
 import { getAttentionRows, sendDuesReminders } from "../_lib/actions"
 import {
   AGEING_OPTIONS,
+  MEMBER_GROUPS,
   type AttentionRow,
   type AttentionType,
 } from "../_lib/validations"
-import { getColumns } from "./attention-columns"
+import { getColumns, roleLabel } from "./attention-columns"
 
 interface AttentionTableProps {
   rowsPromise: ReturnType<typeof getAttentionRows>
@@ -48,9 +50,27 @@ export function AttentionTable({ rowsPromise, type }: AttentionTableProps) {
 
   const filterFields: DataTableFilterField<AttentionRow>[] = [
     {
-      label: "Boarder",
+      label: "Member",
       value: "name",
       placeholder: "Search name or email...",
+    },
+    {
+      label: "Group",
+      value: "group",
+      options: Object.entries(MEMBER_GROUPS).map(([value, label]) => ({
+        label,
+        value,
+        withCount: true,
+      })),
+    },
+    {
+      label: "Role",
+      value: "role",
+      options: Object.values(UserRoleType).map((role) => ({
+        label: roleLabel(role),
+        value: role,
+        withCount: true,
+      })),
     },
   ]
 

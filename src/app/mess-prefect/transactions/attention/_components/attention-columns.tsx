@@ -3,13 +3,24 @@
 import type { ColumnDef } from "@tanstack/react-table"
 
 import { formatIST } from "@/lib/date"
+import type { UserRoleType } from "@/lib/generated/prisma"
 import { cn } from "@/lib/utils"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Checkbox } from "@/components/ui/checkbox"
 import { DataTableColumnHeader } from "@/components/data-table/data-table-column-header"
 import { Badge } from "@/components/reui/badge"
 
-import type { AttentionRow, AttentionType } from "../_lib/validations"
+import {
+  MEMBER_GROUPS,
+  type AttentionRow,
+  type AttentionType,
+} from "../_lib/validations"
+
+/** MESS_PREFECT -> "Mess prefect". */
+export function roleLabel(role: UserRoleType) {
+  const words = role.toLowerCase().replace(/_/g, " ")
+  return words.charAt(0).toUpperCase() + words.slice(1)
+}
 
 function formatMoney(value: number) {
   return `₹${value.toLocaleString("en-IN", { maximumFractionDigits: 2 })}`
@@ -72,6 +83,31 @@ export function getColumns(type: AttentionType): ColumnDef<AttentionRow>[] {
             </p>
           </div>
         </div>
+      ),
+    },
+    {
+      accessorKey: "group",
+      header: ({ column }) => (
+        <DataTableColumnHeader column={column} title="Group" />
+      ),
+      cell: ({ row }) => (
+        <Badge
+          variant={row.original.group === "alumni" ? "secondary" : "info-light"}
+          size="sm"
+        >
+          {MEMBER_GROUPS[row.original.group]}
+        </Badge>
+      ),
+    },
+    {
+      accessorKey: "role",
+      header: ({ column }) => (
+        <DataTableColumnHeader column={column} title="Role" />
+      ),
+      cell: ({ row }) => (
+        <span className="text-muted-foreground text-sm whitespace-nowrap">
+          {roleLabel(row.original.role)}
+        </span>
       ),
     },
     {
