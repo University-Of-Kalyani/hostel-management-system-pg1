@@ -1,9 +1,12 @@
 import * as z from "zod"
 
+import type { UserRoleType } from "@/lib/generated/prisma"
+
 export const ATTENTION_TABS = {
   dues: {
-    label: "Boarders with dues",
-    description: "Active boarders carrying an outstanding balance.",
+    label: "Everyone with dues",
+    description:
+      "Everyone carrying an outstanding balance: boarders, managers, prefects and alumni.",
   },
   overdue: {
     label: "Overdue bills",
@@ -37,7 +40,20 @@ export const searchParamsSchema = z.object({
   name: z.string().optional(),
   /** Minimum days past due, as a string so it round-trips through the URL. */
   days: z.coerce.number().int().min(0).catch(0).default(0),
+  /** Roles, "."-joined by the data table's faceted filter. */
+  role: z.string().optional(),
+  /** Member groups, "."-joined: boarder / staff / alumni. */
+  group: z.string().optional(),
 })
+
+/** Who a balance sits with; alumni and removed accounts are "alumni". */
+export const MEMBER_GROUPS = {
+  boarder: "Boarder",
+  staff: "Manager / prefect",
+  alumni: "Alumni",
+} as const
+
+export type MemberGroup = keyof typeof MEMBER_GROUPS
 
 export type AttentionSearch = z.infer<typeof searchParamsSchema>
 
@@ -53,6 +69,8 @@ export type AttentionRow = {
   name: string
   email: string
   image: string | null
+  role: UserRoleType
+  group: MemberGroup
   /** Outstanding balance for `dues`, overdue total for `overdue`. */
   amount: number
   /** Unpaid bills past their due date. */
